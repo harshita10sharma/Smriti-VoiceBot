@@ -1,0 +1,64 @@
+# Render Blueprint for the SMRITI VoiceBot API.
+#
+# This deploys the EXISTING FastAPI app (smriti_voice/api/app.py) via Docker.
+# It does not add or duplicate any VoiceBot logic.
+#
+# Before applying this blueprint:
+#   1. Verify the `plan` value below against Render's CURRENT plan lineup and
+#      RAM figures in the dashboard. This service needs at least ~8 GB of RAM
+#      for a single Indic Parler-TTS worker (see ARCHITECTURE/DEPLOY notes) —
+#      pick whichever current plan actually provides that; "pro-plus" below
+#      is a placeholder for "the smallest plan with >= 8 GB RAM", not a
+#      guarantee that plan still exists or is named that at deploy time.
+#   2. Set every `sync: false` variable below as a Render secret — never in
+#      this file, never in git.
+#
+# Single web service, single instance, single worker on purpose: a second
+# worker or a second instance would load a second full copy of the ~3.7 GB
+# Indic Parler-TTS model into memory, and generated audio (AudioStore) lives
+# on local disk, so a second instance could not serve audio the first one
+# generated.
+services:
+  - type: web
+    name: smriti-voicebot-api
+    runtime: docker
+    plan: pro-plus  # verify against current Render plans; needs >= 8 GB RAM
+    numInstances: 1
+    healthCheckPath: /v1/health
+    envVars:
+      # --- VoiceBot API key: generate with `python -m smriti_voice.api.generate_key` ---
+      - key: SMRITI_API_KEY
+        sync: false
+      - key: SMRITI_AUTH_USER_ID
+        sync: false
+      # --- Hugging Face token for the gated Indic Parler-TTS model ---
+      - key: HF_TOKEN
+        sync: false
+      # --- Optional cloud provider keys (leave unset to skip that provider) ---
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      # --- Indic Parler-TTS: the validated offline path for asm/brx/mni/npi ---
+      - key: SMRITI_INDIC_PARLER_ENABLED
+        value: "1"
+      - key: SMRITI_INDIC_PARLER_LANGUAGES
+        value: asm,brx,mni,npi
+      - key: SMRITI_INDIC_PARLER_DEVICE
+        value: cpu
+      - key: SMRITI_TTS_PROVIDER
+        value: auto
+      # --- Persist the model cache and app data on the attached disk, so the
+      #     ~3.7 GB model is not re-downloaded on every deploy/restart ---
+      - key: HF_HOME
+        value: /data/hf-cache
+      - key: SMRITI_DB_PATH
+        value: /data/smriti.db
+      - key: SMRITI_AUDIO_CACHE_DIR
+        value: /data/audio
+    disk:
+      name: smriti-data
+      mountPath: /data
+      sizeGB: 10

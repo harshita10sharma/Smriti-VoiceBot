@@ -90,18 +90,25 @@ def main() -> int:
     else:
         row('llm: live generation', 'SKIP', 'N/A', 'no LLM credentials configured')
 
-    # 5. TTS — only if a provider covers the language.
-    if app.languages.can_speak(args.language) and app.config.providers.sarvam_key:
+    # 5. TTS — attempt synthesis whenever any provider is actually configured
+    # (Sarvam or Indic Parler); `can_speak()` only reflects Sarvam's language
+    # list, so it must not gate this check or Indic Parler-only languages
+    # (asm, brx, mni, npi) would never be exercised here.
+    tts_ready = any(app.tts.available().get(name) for name in ('sarvam', 'indic_parler', 'local'))
+    if tts_ready:
         spoken = app.tts.synthesize('Hello, how are you today?', args.language)
-        status = 'PASS' if spoken.available else 'FAIL'
-        failures += 0 if spoken.available else 1
-        row(f'tts: {args.language}', status, 'REAL',
-            f'{spoken.provider} {spoken.size_bytes}B {spoken.latency_ms}ms'
-            if spoken.available else str(spoken.unavailable_reason))
+        if spoken.available:
+            failures += 0
+            row(f'tts: {args.language}', 'PASS', 'REAL',
+                f'{spoken.provider} {spoken.size_bytes}B {spoken.latency_ms}ms')
+        elif spoken.unavailable_reason == 'NO_TTS_PROVIDER_SUPPORTS_LANGUAGE':
+            row(f'tts: {args.language}', 'SKIP', 'N/A',
+                'no configured provider speaks this language')
+        else:
+            failures += 1
+            row(f'tts: {args.language}', 'FAIL', 'REAL', str(spoken.unavailable_reason))
     else:
-        reason = ('no configured provider speaks this language'
-                  if not app.languages.can_speak(args.language) else 'no SARVAM_API_KEY')
-        row(f'tts: {args.language}', 'SKIP', 'N/A', reason)
+        row(f'tts: {args.language}', 'SKIP', 'N/A', 'no TTS provider configured')
 
     # 6. Weather — a real network call when reachable.
     weather_result = app.registry.execute(ToolCall(name='get_weather', arguments={}),

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic safety policy. Edited by engineers, never by the model.",
+  "sensitive_categories": {
+    "medication": {
+      "refusal_key": "medication",
+      "verbs": ["change", "increase", "decrease", "double", "halve", "stop", "start", "skip",
+                "delete", "remove", "add", "update", "modify", "edit", "adjust", "raise", "lower",
+                "reduce", "cancel", "prescribe", "take extra", "more", "less"],
+      "nouns": ["medicine", "medicines", "medication", "medications", "dose", "doses", "dosage",
+                "prescription", "prescriptions", "tablet", "tablets", "pill", "pills", "drug",
+                "drugs", "mg", "milligram", "milligrams", "insulin", "injection"]
+    },
+    "financial": {
+      "refusal_key": "financial",
+      "verbs": ["transfer", "send", "pay", "withdraw", "deposit", "buy", "purchase", "order",
+                "recharge", "lend", "loan", "invest", "donate"],
+      "nouns": ["money", "rupees", "rupee", "cash", "bank", "account", "upi", "card", "bill",
+                "payment", "salary", "pension", "fund", "funds", "wallet"],
+      "standalone": ["transfer money", "send money", "pay bill", "make a payment"]
+    },
+    "record_deletion": {
+      "refusal_key": "record_deletion",
+      "verbs": ["delete", "remove", "erase", "clear", "drop", "wipe", "destroy", "reset"],
+      "nouns": ["family", "people", "person", "contact", "contacts", "memory", "memories",
+                "record", "records", "history", "data", "profile", "account", "reminder",
+                "reminders", "appointment", "appointments", "schedule", "routine", "game", "games"]
+    },
+    "unknown_number": {
+      "refusal_key": "unknown_number",
+      "standalone": ["call this number", "dial this number"]
+    },
+    "caregiver_permissions": {
+      "refusal_key": "caregiver_permissions",
+      "verbs": ["change", "grant", "revoke", "remove", "add", "disable", "enable", "reset"],
+      "nouns": ["permission", "permissions", "caregiver", "admin", "password", "pin", "passcode",
+                "security", "settings", "access", "login", "account"]
+    },
+    "safety_override": {
+      "refusal_key": "safety_override",
+      "standalone": ["disable safety", "turn off safety", "ignore safety", "bypass safety",
+                     "disable the safety", "switch off safety", "override safety",
+                     "ignore all previous instructions", "ignore previous instructions",
+                     "ignore your instructions", "forget your instructions",
+                     "you are now", "developer mode", "jailbreak", "sudo mode"]
+    }
+  },
+  "confirmation_required_actions": ["CALL_PRIMARY_CONTACT", "CALL_BINA", "CREATE_REMINDER", "START_GAME"],
+  "affirmations": {
+    "eng": ["yes", "yeah", "yep", "ok", "okay", "sure", "please", "please do", "do it", "go ahead",
+            "yes please", "correct", "right", "haan", "han", "ha"],
+    "hin": ["हाँ", "हां", "जी", "जी हाँ", "ठीक है", "कीजिए", "करो", "बिलकुल"],
+    "asm": ["হয়", "হ'ব", "ঠিক আছে"],
+    "ben": ["হ্যাঁ", "হ্যা", "ঠিক আছে", "করুন"]
+  },
+  "negations": {
+    "eng": ["no", "nope", "not now", "cancel", "stop", "don't", "do not", "nahi", "nahin"],
+    "hin": ["नहीं", "ना", "मत", "रुको"],
+    "asm": ["নহয়", "নালাগে"],
+    "ben": ["না", "নাহ"]
+  }
+}

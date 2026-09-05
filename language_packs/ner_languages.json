@@ -1,0 +1,152 @@
+[
+  {
+    "code": "asm",
+    "name": "Assamese",
+    "script": "Bengali-Assamese",
+    "status": "benchmark_only",
+    "status_note": "Downgraded from validated_local on 2026-09-05: the configured model_id (OpenVoiceOS/ai4bharat-indicconformer-as-onnx) is an empty placeholder repo on Hugging Face with no model weights (verified live). The ne_asr fallback (MWirelabs/ne-asr) never auto-downloads (NeASR.warmup always sets local_files_only=True), so it requires manual provisioning before use, same as the other benchmark_only languages. Re-promote only after a real Assamese ONNX model is provisioned and transcription is measured.",
+    "providers": [
+      "indicconformer",
+      "ne_asr"
+    ],
+    "model_id": "OpenVoiceOS/ai4bharat-indicconformer-as-onnx"
+  },
+  {
+    "code": "ben",
+    "name": "Bengali",
+    "script": "Bengali",
+    "status": "validated_local",
+    "providers": [
+      "indicconformer"
+    ],
+    "model_id": "OpenVoiceOS/ai4bharat-indicconformer-bn-onnx"
+  },
+  {
+    "code": "brx",
+    "name": "Bodo",
+    "script": "Devanagari",
+    "status": "validated_local",
+    "providers": [
+      "indicconformer"
+    ],
+    "model_id": "OpenVoiceOS/ai4bharat-indicconformer-brx-onnx"
+  },
+  {
+    "code": "mni",
+    "name": "Meitei (Manipuri)",
+    "script": "Meitei/Bengali",
+    "status": "validated_local",
+    "providers": [
+      "indicconformer"
+    ],
+    "model_id": "OpenVoiceOS/ai4bharat-indicconformer-mni-onnx"
+  },
+  {
+    "code": "npi",
+    "name": "Nepali",
+    "script": "Devanagari",
+    "status": "validated_local",
+    "providers": [
+      "indicconformer"
+    ],
+    "model_id": "OpenVoiceOS/ai4bharat-indicconformer-ne-onnx"
+  },
+  {
+    "code": "kha",
+    "name": "Khasi",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "lus",
+    "name": "Mizo",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "grt",
+    "name": "Garo",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "trp",
+    "name": "Kokborok (Tripuri)",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "nag",
+    "name": "Nagamese",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "ccp",
+    "name": "Chakma",
+    "script": "Chakma",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "wao",
+    "name": "Wancho",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "ne_asr"
+    ],
+    "model_id": "MWirelabs/ne-asr"
+  },
+  {
+    "code": "eng",
+    "name": "English",
+    "script": "Latin",
+    "status": "benchmark_only",
+    "providers": [
+      "generic_whisper"
+    ],
+    "model_id": "openai/whisper-small"
+  },
+  {
+    "code": "hin",
+    "name": "Hindi",
+    "script": "Devanagari",
+    "status": "validated_local",
+    "providers": [
+      "indicconformer"
+    ],
+    "model_id": "OpenVoiceOS/ai4bharat-indicconformer-hi-onnx"
+  },
+  {
+    "code": "nyish",
+    "name": "Nyishi",
+    "script": "Latin",
+    "status": "unsupported_local",
+    "providers": [],
+    "model_id": null
+  }
+]

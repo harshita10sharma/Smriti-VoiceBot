@@ -1,0 +1,29 @@
+[project]
+name = "smriti-voicebot"
+version = "5.0.0"
+description = "Offline-first multilingual voice assistant for elderly care (SIH26003YELLOW)"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+indic-parler = [
+    "torch>=2.3",
+    "transformers>=4.44",
+    "parler_tts>=0.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S"]
+ignore = ["S101"]   # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "E501"]

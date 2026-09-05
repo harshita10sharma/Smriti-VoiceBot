@@ -1,0 +1,34 @@
+{
+  "OPEN_PLAY": {
+    "action": "OPEN_PLAY",
+    "phrases": []
+  },
+  "OPEN_MY_PEOPLE": {
+    "action": "OPEN_MY_PEOPLE",
+    "phrases": []
+  },
+  "OPEN_TODAY": {
+    "action": "OPEN_TODAY",
+    "phrases": []
+  },
+  "CALL_BINA": {
+    "action": "CALL_BINA",
+    "phrases": []
+  },
+  "OPEN_MEDICINE": {
+    "action": "OPEN_MEDICINE",
+    "phrases": []
+  },
+  "HELP": {
+    "action": "HELP",
+    "phrases": []
+  },
+  "STOP": {
+    "action": "STOP",
+    "phrases": []
+  },
+  "UNKNOWN": {
+    "action": "NO_ACTION",
+    "phrases": []
+  }
+}

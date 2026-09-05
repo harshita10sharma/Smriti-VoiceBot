@@ -1,0 +1,98 @@
+{
+  "OPEN_PLAY": {
+    "action": "OPEN_PLAY",
+    "phrases": [
+      "open play",
+      "play",
+      "start game",
+      "start playing",
+      "open the game",
+      "open games",
+      "play the game",
+      "go to play"
+    ]
+  },
+  "OPEN_MY_PEOPLE": {
+    "action": "OPEN_MY_PEOPLE",
+    "phrases": [
+      "my people",
+      "show my people",
+      "open my people",
+      "family",
+      "show family",
+      "my family",
+      "people",
+      "family members"
+    ]
+  },
+  "OPEN_TODAY": {
+    "action": "OPEN_TODAY",
+    "phrases": [
+      "today",
+      "open today",
+      "show today",
+      "today schedule",
+      "today routine",
+      "what is today",
+      "my day"
+    ]
+  },
+  "CALL_PRIMARY_CONTACT": {
+    "action": "CALL_PRIMARY_CONTACT",
+    "phrases": [
+      "call primary contact",
+      "call my contact",
+      "call my caregiver",
+      "call family",
+      "call my family",
+      "call the primary caregiver"
+    ]
+  },
+  "CALL_BINA": {
+    "action": "CALL_BINA",
+    "phrases": [
+      "call bina",
+      "call bina",
+      "call my bina",
+      "call primary contact",
+      "call caregiver",
+      "call family member"
+    ]
+  },
+  "OPEN_MEDICINE": {
+    "action": "OPEN_MEDICINE",
+    "phrases": [
+      "medicine",
+      "my medicine",
+      "show medicine",
+      "open medicine",
+      "medicines",
+      "what medicine",
+      "medicine reminder"
+    ]
+  },
+  "HELP": {
+    "action": "HELP",
+    "phrases": [
+      "help",
+      "i need help",
+      "what can you do",
+      "help me",
+      "show help"
+    ]
+  },
+  "STOP": {
+    "action": "STOP",
+    "phrases": [
+      "stop",
+      "cancel",
+      "stop voice",
+      "go back",
+      "exit"
+    ]
+  },
+  "UNKNOWN": {
+    "action": "NO_ACTION",
+    "phrases": []
+  }
+}

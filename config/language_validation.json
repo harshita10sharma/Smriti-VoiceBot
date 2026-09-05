@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "description": "Evidence file. A language is only ever reported as SUPPORTED if it has a record here produced by an ACTUAL test run (tools/evaluate_languages.py writes these). An empty list means nothing has been validated yet, and the capability matrix will say NOT_YET_TESTED rather than claiming support.",
+  "how_to_add": "Run tools/evaluate_languages.py with real credentials and real audio. It appends a record with the date, the sample count, the measured WER/CER and the operator's name. Hand-editing this file to claim support is a falsification of the evaluation record.",
+  "validated": []
+}

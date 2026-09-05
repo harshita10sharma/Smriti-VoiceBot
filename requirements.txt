@@ -1,0 +1,33 @@
+# --- Core service ----------------------------------------------------------
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+httpx>=0.27
+python-dotenv>=1.0
+
+# --- Deterministic command router (v4.1) -----------------------------------
+rapidfuzz>=3.9
+
+# --- Audio handling --------------------------------------------------------
+numpy>=1.26,<2.0
+scipy>=1.13
+soundfile>=0.13.1
+sounddevice>=0.5.2
+
+# --- Optional: local ASR and language identification -----------------------
+# Not needed for the cloud path or for the test suite. Install on a device that
+# runs local models. See OFFLINE notes in README.md.
+# onnx-asr[cpu,hub]>=0.12.0
+# ne-lid>=1.0.1
+
+# --- Optional: Indic Parler-TTS (local, offline TTS for asm/brx/mni/npi) ----
+# Large (torch pulls ~200MB+). Not needed unless SMRITI_INDIC_PARLER_ENABLED=1.
+# On Windows, torch also requires the Microsoft Visual C++ 2015-2022 x64
+# Redistributable to be installed on the host.
+# torch>=2.2
+# transformers>=4.40
+# parler-tts>=0.2.3
+
+# --- Development -----------------------------------------------------------
+pytest>=8.0

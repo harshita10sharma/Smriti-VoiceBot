@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "update_strategy": "atomic-pack-replacement",
+  "required_fields": ["code", "name", "status", "providers", "model_id"],
+  "runtime_network_access": false,
+  "model_download_allowed_only_during": "provisioning",
+  "rule": "Never silently substitute a different language model. If a requested language pack is unavailable, return LANGUAGE_UNAVAILABLE and let the UI use touch/keypad fallback."
+}

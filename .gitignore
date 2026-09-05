@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- SMRITI VoiceBot project-specific ---
+
+# secrets
+.env.*
+!.env.example
+
+# runtime data
+logs/*.jsonl
+data/voice_dataset/
+audio/responses/*
+*.wav
+
+# v5 runtime artifacts (db, cached TTS audio, session state)
+runtime/
+
+# downloaded/cached ML models (Indic Parler-TTS, ASR models, etc. - not checked in)
+models/*
+*.db
+*.db-wal
+*.db-shm
+
+# HuggingFace model cache, if ever pointed at the repo instead of the user cache dir
+.cache/huggingface/

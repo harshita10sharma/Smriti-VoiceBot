@@ -70,7 +70,13 @@ x-api-key: <your VoiceBot API key>
 | `language` | string | no | A 3-letter code, e.g. `asm`, `brx`, `mni`, `npi`, `eng`, `hin`. If omitted, the server detects it from the audio. If given and not a known SMRITI language, the request fails with `400 Unknown language`. |
 | `speak` | bool | no | Default `true`. Set `false` to skip TTS and only get text back (faster). |
 
-### Response — `200 OK`
+### Response — `200 OK` (returns in a few seconds — audio is not ready yet)
+
+Speech-to-text and the conversation answer are computed synchronously, but
+**text-to-speech is asynchronous**: Indic Parler-TTS can take well over a
+minute on CPU, longer than most HTTP proxies (including Cloudflare Tunnel)
+will wait for a single request. So this endpoint returns as soon as the
+text answer exists, carrying a `job_id` you poll for the audio:
 
 ```json
 {
@@ -83,22 +89,54 @@ x-api-key: <your VoiceBot API key>
   "action": "NO_ACTION",
   "action_accepted": false,
   "transcript": "মই ভাল আছোঁ",
-  "audio_id": "e13a1260e49d035e94c0d9d785489f76",
-  "audio_url": "/v1/audio/e13a1260e49d035e94c0d9d785489f76",
-  "audio_available": true,
-  "audio_unavailable_reason": null,
-  "tts_provider": "indic_parler",
+  "job_id": "50f5dc5393764e6b8ade7769e28aca72",
+  "job_status": "QUEUED",
+  "audio_id": null,
+  "audio_url": null,
+  "audio_available": false,
+  "audio_unavailable_reason": "TTS_PROCESSING",
+  "tts_provider": null,
   "requires_confirmation": false,
-  "metadata": { "total_latency_ms": 21870, "tts_provider": "indic_parler", "...": "..." }
+  "metadata": { "total_latency_ms": 4200, "...": "..." }
 }
 ```
 
 `language` is always the language the VoiceBot actually detected and
 answered in — the same code flows through detection → response → TTS with
-**no silent substitution**. If TTS could not produce audio in that language,
-`audio_available` is `false` and `audio_unavailable_reason` explains why
-(e.g. `NO_TTS_PROVIDER_SUPPORTS_LANGUAGE`); `response_text` is still present,
-so the app can always fall back to on-screen text.
+**no silent substitution**. Show `response_text` to the user immediately;
+it does not wait on TTS. `job_id` is `null` when `speak=false` was sent, or
+when an error (e.g. no speech detected) meant TTS was never attempted —
+check `job_status == "NOT_REQUESTED"` for that case.
+
+## Polling for the generated audio
+
+```
+GET /v1/voice/jobs/{job_id}
+x-api-key: <your VoiceBot API key>
+```
+
+```json
+{
+  "job_id": "50f5dc5393764e6b8ade7769e28aca72",
+  "status": "completed",
+  "language": "brx",
+  "audio_id": "122a4bd2cfd5985c9af58e49314c1f83",
+  "audio_url": "/v1/audio/122a4bd2cfd5985c9af58e49314c1f83",
+  "tts_provider": "indic_parler",
+  "error_code": null
+}
+```
+
+`status` is one of `queued`, `processing`, `completed`, `failed`. Poll every
+1–2 seconds until it is no longer `queued`/`processing`. On `completed`,
+`audio_id`/`audio_url` are set — fetch them the same way as before. On
+`failed`, `error_code` explains why (e.g. `NO_TTS_PROVIDER_SUPPORTS_LANGUAGE`
+if nothing covers that language); `response_text` from the original POST is
+still the correct answer to show — text never depends on TTS succeeding.
+
+A job belonging to a different `user_id` than the one your key is bound to
+returns `404`, the same as a job id that never existed — job ids cannot be
+used to probe for other users' jobs.
 
 ## Endpoint: text turn (no audio in)
 
@@ -169,7 +207,7 @@ Returns booleans/status only — safe to poll from an uptime monitor.
 | `400` | Malformed request or unknown language |
 | `401` | Missing or invalid `x-api-key` |
 | `403` | `user_id` does not match the authenticated identity, or a session belongs to another user |
-| `404` | Audio id not found/expired, or unknown language code on `/v1/languages/{code}` |
+| `404` | Audio id not found/expired, unknown/not-yours job id, or unknown language code on `/v1/languages/{code}` |
 | `413` | Uploaded WAV exceeds the server's upload limit |
 | `415` | Not a valid/parseable WAV file |
 | `422` | Request failed schema validation (e.g. malformed `user_id`) |
@@ -188,6 +226,12 @@ curl -X POST https://<service-name>.onrender.com/v1/conversation/voice \
   -F "audio_wav=@utterance.wav" \
   -F "user_id=elder-1" \
   -F "language=asm"
+# -> { "response_text": "...", "job_id": "50f5...", "job_status": "QUEUED", ... }
+
+# Poll until the job is no longer queued/processing:
+curl https://<service-name>.onrender.com/v1/voice/jobs/50f5dc5393764e6b8ade7769e28aca72 \
+  -H "x-api-key: $VOICEBOT_API_KEY"
+# -> { "status": "completed", "audio_id": "122a...", "audio_url": "/v1/audio/122a...", ... }
 
 # Then fetch the audio:
 curl https://<service-name>.onrender.com/v1/audio/<audio_id> \
@@ -198,6 +242,7 @@ curl https://<service-name>.onrender.com/v1/audio/<audio_id> \
 ## Python example
 
 ```python
+import time
 import requests
 
 BASE_URL = "https://<service-name>.onrender.com"
@@ -209,20 +254,34 @@ with open("utterance.wav", "rb") as f:
         headers={"x-api-key": API_KEY},
         data={"user_id": "elder-1", "language": "asm"},
         files={"audio_wav": ("utterance.wav", f, "audio/wav")},
-        timeout=60,  # Indic Parler-TTS synthesis on CPU can take ~20-30s
+        timeout=30,  # ASR + conversation only; this returns long before TTS finishes
     )
 response.raise_for_status()
 turn = response.json()
-print(turn["response_text"], turn["language"])
+print(turn["response_text"], turn["language"])  # show this immediately
 
-if turn["audio_available"]:
-    audio = requests.get(
-        f"{BASE_URL}{turn['audio_url']}",
-        headers={"x-api-key": API_KEY},
-        timeout=30,
-    )
+audio_bytes = None
+if turn["job_id"]:
+    for _ in range(120):  # poll for up to ~2 minutes
+        job = requests.get(
+            f"{BASE_URL}/v1/voice/jobs/{turn['job_id']}",
+            headers={"x-api-key": API_KEY}, timeout=10,
+        ).json()
+        if job["status"] == "completed":
+            audio = requests.get(
+                f"{BASE_URL}{job['audio_url']}",
+                headers={"x-api-key": API_KEY}, timeout=30,
+            )
+            audio_bytes = audio.content
+            break
+        if job["status"] == "failed":
+            print("no audio for this reply:", job["error_code"])
+            break
+        time.sleep(1)
+
+if audio_bytes:
     with open("reply.wav", "wb") as out:
-        out.write(audio.content)
+        out.write(audio_bytes)
 ```
 
 ## JavaScript / TypeScript example
@@ -243,14 +302,25 @@ async function sendUtterance(wavBlob: Blob, userId: string, language?: string) {
     body: form,
   });
   if (!res.ok) throw new Error(`VoiceBot request failed: ${res.status}`);
-  const turn = await res.json();
+  const turn = await res.json(); // show turn.response_text right away
 
   let audioBlob: Blob | null = null;
-  if (turn.audio_available) {
-    const audioRes = await fetch(`${BASE_URL}${turn.audio_url}`, {
-      headers: { "x-api-key": API_KEY },
-    });
-    audioBlob = await audioRes.blob();
+  if (turn.job_id) {
+    for (let i = 0; i < 120; i++) {
+      const jobRes = await fetch(`${BASE_URL}/v1/voice/jobs/${turn.job_id}`, {
+        headers: { "x-api-key": API_KEY },
+      });
+      const job = await jobRes.json();
+      if (job.status === "completed") {
+        const audioRes = await fetch(`${BASE_URL}${job.audio_url}`, {
+          headers: { "x-api-key": API_KEY },
+        });
+        audioBlob = await audioRes.blob();
+        break;
+      }
+      if (job.status === "failed") break; // job.error_code explains why
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   }
   return { turn, audioBlob };
 }

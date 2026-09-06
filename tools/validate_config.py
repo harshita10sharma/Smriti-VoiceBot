@@ -88,19 +88,56 @@ def main() -> int:
           any(ready for name, ready in app.llm.available().items() if name != 'mock'),
           'only the mock provider is available', hard=False)
     check('any TTS provider buildable',
-          any(app.tts.available().get(name) for name in ('sarvam', 'local')),
+          any(app.tts.available().get(name) for name in ('sarvam', 'local', 'indic_parler')),
           'no real TTS provider is available', hard=False)
 
-    print('\nAPI authentication')
-    key_set = bool(os.getenv(app.config.api_key_env))
-    if key_set:
-        check(f'{app.config.api_key_env} is set', True)
+    print('\nIndic Parler-TTS (asm/brx/mni/npi)')
+    if app.config.providers.indic_parler_enabled:
+        hf_token_set = bool(os.getenv('HF_TOKEN', '').strip())
+        check('HF_TOKEN is set', hf_token_set,
+              'ai4bharat/indic-parler-tts is a gated model; without HF_TOKEN the first '
+              'download/load will fail with 401')
+        check('indic_parler provider builds', app.tts.available().get('indic_parler', False),
+              'see server logs for the exact provider error')
     else:
-        check(f'{app.config.api_key_env} is set', app.config.allow_unauthenticated,
-              'protected endpoints will return 503 until this is set', hard=False)
-    identity_set = bool(os.getenv('SMRITI_AUTH_USER_ID', '').strip())
-    check('SMRITI_AUTH_USER_ID is set', identity_set,
-          'protected personal endpoints will return 503 until this is set', hard=False)
+        check('SMRITI_INDIC_PARLER_ENABLED is set', False,
+              'asm/brx/mni/npi will have no voice output until this is enabled', hard=False)
+
+    print('\nAPI authentication')
+    raw_key_map = os.getenv('SMRITI_API_KEYS', '').strip()
+    key_set = bool(os.getenv(app.config.api_key_env))
+    if raw_key_map:
+        from smriti_voice.api.dependencies import _parse_api_key_map
+        try:
+            key_map = _parse_api_key_map(raw_key_map)
+        except ValueError as exc:
+            check('SMRITI_API_KEYS is valid', False, str(exc))
+            key_map = {}
+        else:
+            check('SMRITI_API_KEYS is valid', True,
+                  f'{len(key_map)} identity(ies) configured — multi-user mode')
+            check('SMRITI_API_KEYS identities are unique',
+                  len(set(key_map.values())) == len(key_map),
+                  'two keys map to the same user id, which is redundant but not unsafe',
+                  hard=False)
+        if key_set or os.getenv('SMRITI_AUTH_USER_ID', '').strip():
+            warnings.append('SMRITI_API_KEYS is set alongside SMRITI_API_KEY/SMRITI_AUTH_USER_ID '
+                             '— multi-user mode takes priority and the single-user variables '
+                             'are ignored; unset them to avoid confusion')
+    else:
+        if key_set:
+            check(f'{app.config.api_key_env} is set', True, 'single-user mode')
+        else:
+            check(f'{app.config.api_key_env} is set', app.config.allow_unauthenticated,
+                  'protected endpoints will return 503 until this is set', hard=False)
+        identity_set = bool(os.getenv('SMRITI_AUTH_USER_ID', '').strip())
+        check('SMRITI_AUTH_USER_ID is set', identity_set,
+              'protected personal endpoints will return 503 until this is set', hard=False)
+        if key_set and identity_set:
+            warnings.append(
+                'Running in single-user mode: this deployment serves exactly one elder '
+                '(the identity bound to SMRITI_AUTH_USER_ID). To serve multiple elderly '
+                'users through one backend, configure SMRITI_API_KEYS instead.')
     if app.config.allow_unauthenticated:
         warnings.append('SMRITI_ALLOW_UNAUTHENTICATED=1 — never do this on a network-facing host')
 

@@ -1,6 +1,7 @@
 """Shared API dependencies: authentication, rate limiting, request identity."""
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -57,30 +58,84 @@ def get_limiter(app: Application) -> RateLimiter:
     return _limiter
 
 
+def _parse_api_key_map(raw: str) -> dict[str, str]:
+    """Parse ``SMRITI_API_KEYS`` into ``{api_key: user_id}``.
+
+    Raises ``ValueError`` on anything malformed — callers must treat that as a
+    fail-closed 503, never as "fall back to single-key mode", so a typo in
+    this variable cannot silently downgrade a multi-user deployment.
+    """
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise ValueError('SMRITI_API_KEYS is not valid JSON') from exc
+    if not isinstance(parsed, dict) or not parsed:
+        raise ValueError('SMRITI_API_KEYS must be a non-empty JSON object of {api_key: user_id}')
+    for key, user_id in parsed.items():
+        if not isinstance(key, str) or not isinstance(user_id, str) \
+                or not key.strip() or not user_id.strip():
+            raise ValueError('SMRITI_API_KEYS keys and values must be non-empty strings')
+    return parsed
+
+
 def require_api_key(request: Request, x_api_key: str | None = Header(default=None)) -> str:
     """Fail closed.
 
-    If no server key is configured the service refuses to serve protected routes,
-    unless the operator has explicitly opted into unauthenticated local use.
+    Two mutually exclusive modes, chosen by which variable is set:
+
+    - Multi-user (``SMRITI_API_KEYS``, a JSON object of ``{api_key: user_id}``):
+      each key is bound to its own user id. A caller authenticates as exactly
+      the identity its own key maps to — it can never claim a different
+      ``user_id`` in the request body, because every route compares that
+      field against the identity established here (see
+      ``authenticated_user_id`` below and the ``user_id != authenticated_id``
+      checks in the route handlers). This is what lets one backend serve many
+      elderly users through one VoiceBot deployment.
+    - Single-user (``SMRITI_API_KEY`` + ``SMRITI_AUTH_USER_ID``): one shared
+      key bound to one fixed identity — the original design, unchanged, for a
+      deployment that serves exactly one elder.
+
+    If no server key is configured at all the service refuses to serve
+    protected routes, unless the operator has explicitly opted into
+    unauthenticated local use.
     """
     app = application(request)
-    expected = os.getenv(app.config.api_key_env)
+    raw_key_map = (os.getenv('SMRITI_API_KEYS') or '').strip()
 
-    if not expected:
-        if not app.config.allow_unauthenticated:
-            raise HTTPException(503, 'API authentication is not configured')
-        principal = 'anonymous'
-    else:
-        if not x_api_key or not _constant_time_equals(x_api_key, expected):
+    if raw_key_map:
+        try:
+            key_map = _parse_api_key_map(raw_key_map)
+        except ValueError as exc:
+            log.error('smriti_api_keys_misconfigured', fields={'error': str(exc)})
+            raise HTTPException(503, 'API authentication is not configured correctly') from exc
+
+        matched_user_id = next(
+            (user_id for key, user_id in key_map.items()
+             if x_api_key and _constant_time_equals(x_api_key, key)),
+            None)
+        if matched_user_id is None:
             raise HTTPException(401, 'Invalid API key')
-        principal = 'api-key'
+        request.state.authenticated_user_id = matched_user_id
+        principal = matched_user_id
+    else:
+        expected = os.getenv(app.config.api_key_env)
+        if not expected:
+            if not app.config.allow_unauthenticated:
+                raise HTTPException(503, 'API authentication is not configured')
+            principal = 'anonymous'
+        else:
+            if not x_api_key or not _constant_time_equals(x_api_key, expected):
+                raise HTTPException(401, 'Invalid API key')
+            principal = 'api-key'
 
-    # A shared API key authenticates the service client. Personal endpoints use
-    # authenticated_user_id below to add the user binding before memory/session
-    # access; the legacy command endpoint remains API-key compatible.
-    bound_user_id = (os.getenv('SMRITI_AUTH_USER_ID') or '').strip()
-    if bound_user_id:
-        request.state.authenticated_user_id = bound_user_id
+        # A shared API key authenticates the service client. Personal endpoints
+        # use authenticated_user_id below to add the user binding before
+        # memory/session access; the legacy command endpoint remains
+        # API-key compatible.
+        bound_user_id = (os.getenv('SMRITI_AUTH_USER_ID') or '').strip()
+        if bound_user_id:
+            request.state.authenticated_user_id = bound_user_id
+            principal = bound_user_id
 
     if not get_limiter(app).check(principal):
         raise HTTPException(429, 'Too many requests')

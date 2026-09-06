@@ -29,6 +29,20 @@ x-api-key: <your VoiceBot API key>
   configured` (fails closed; it never silently allows unauthenticated access).
 - Rate limited → `429 Too many requests`.
 
+**The API key is server-side only.** Your backend stores it as a secret and
+calls this API from your server — never embed it in a mobile app binary or
+in browser JavaScript that ships to end users.
+
+**Identity binding.** Each API key is bound server-side to exactly one
+`user_id`. Whatever `user_id` you send in a request **must match the identity
+your key is bound to**, or the request fails with `403` — you cannot use one
+key to read or act on another user's data by changing `user_id` in the JSON
+body. If you have been issued one key per elderly user (the deployment's
+"multi-user mode"), send that user's own key on every request for them. If
+you have been issued a single shared key (the deployment's "single-user
+mode"), it is bound to one fixed `user_id` and can only ever act as that one
+user — ask the operator which mode your deployment uses.
+
 This key is generated with:
 
 ```bash

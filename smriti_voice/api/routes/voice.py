@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ...app import Application
 from ...pipeline import VoicePipeline
-from ...schemas import VoiceResponse
+from ...schemas import VoiceJobStatusResponse, VoiceResponse
 from ..dependencies import application, authenticated_user_id, request_id, require_api_key
 from ..upload import read_wav_upload
 
@@ -56,3 +56,21 @@ def audio(audio_id: str, app: Application = Depends(application)) -> FileRespons
     if path is None:
         raise HTTPException(404, 'Audio not found or expired')
     return FileResponse(path, media_type='audio/wav', filename=f'{audio_id}.wav')
+
+
+@router.get('/v1/voice/jobs/{job_id}', response_model=VoiceJobStatusResponse)
+def voice_job_status(
+    job_id: str,
+    app: Application = Depends(application),
+    authenticated_id: str = Depends(authenticated_user_id),
+) -> VoiceJobStatusResponse:
+    job = app.voice_jobs.get(job_id)
+    # A job belonging to a different user is reported the same as a missing
+    # one, so a job id cannot be used to probe for other users' job ids.
+    if job is None or job.user_id != authenticated_id:
+        raise HTTPException(404, 'Job not found')
+    return VoiceJobStatusResponse(
+        job_id=job.job_id, status=job.status, language=job.language,
+        audio_id=job.audio_id,
+        audio_url=f'/v1/audio/{job.audio_id}' if job.audio_id else None,
+        tts_provider=job.tts_provider, error_code=job.error_code)

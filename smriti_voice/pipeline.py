@@ -1,10 +1,16 @@
-"""The voice pipeline: audio in, audio out.
+"""The voice pipeline: audio in, text back immediately, audio via a job.
 
-    WAV → validate → ASR → language detection → conversation → TTS → audio id
+    WAV → validate → ASR → language detection → conversation → [TTS job queued]
 
-Each stage records its own latency and degrades on its own terms: a failed TTS
-still returns the text answer, and a failed ASR returns a structured error
-rather than an empty transcript that the router would misread as silence.
+ASR and conversation run synchronously (both are fast). TTS does not: Indic
+Parler-TTS can take well over a minute on CPU, past most HTTP proxy
+timeouts, so speech synthesis is queued as a job and the response returns
+immediately with a job id. The caller polls GET /v1/voice/jobs/{job_id}
+until it is 'completed', then fetches GET /v1/audio/{audio_id}.
+
+Each stage records its own latency and degrades on its own terms: a failed
+ASR returns a structured error rather than an empty transcript that the
+router would misread as silence.
 """
 from __future__ import annotations
 
@@ -69,23 +75,21 @@ class VoicePipeline:
                                              session_id=session_id, language=turn_language,
                                              request_id=rid)
 
-        # 4. Speak the answer, in the same language or not at all.
-        tts_latency = 0
-        audio_id = None
-        audio_available = False
+        # 4. Queue speech synthesis; the caller polls for the result rather
+        # than waiting on this request for it.
+        job_id = None
+        job_status = 'NOT_REQUESTED'
         audio_reason = 'TTS_NOT_REQUESTED'
-        tts_provider = None
         if speak:
-            spoken = self.app.tts.synthesize(reply.response_text, turn_language, request_id=rid)
-            tts_latency = spoken.latency_ms
-            audio_id = spoken.audio_id
-            audio_available = bool(spoken.available and spoken.audio_id)
-            audio_reason = spoken.unavailable_reason
-            tts_provider = spoken.provider
+            job_id = self.app.voice_jobs.create(
+                user_id=user_id, session_id=reply.session_id, language=turn_language,
+                response_text=reply.response_text)
+            self.app.voice_job_worker.submit(job_id)
+            job_status = 'QUEUED'
+            audio_reason = 'TTS_PROCESSING'
 
         metadata = reply.metadata.model_copy(update={
             'asr_provider': asr.provider, 'asr_latency_ms': asr.latency_ms,
-            'tts_provider': tts_provider, 'tts_latency_ms': tts_latency,
             'offline': asr.offline,
             'total_latency_ms': int((time.perf_counter() - started) * 1000),
         })
@@ -97,11 +101,13 @@ class VoicePipeline:
             metadata=metadata,
             transcript=asr.transcript,
             language_confidence=detection.confidence,
-            audio_id=audio_id,
-            audio_url=f'/v1/audio/{audio_id}' if audio_id else None,
-            audio_available=audio_available,
+            job_id=job_id,
+            job_status=job_status,
+            audio_id=None,
+            audio_url=None,
+            audio_available=False,
             audio_unavailable_reason=audio_reason,
-            tts_provider=tts_provider)
+            tts_provider=None)
 
     def _error(self, request_id: str, session_id: str | None, language: str, code: str,
                started: float, *, asr_provider: str | None = None,

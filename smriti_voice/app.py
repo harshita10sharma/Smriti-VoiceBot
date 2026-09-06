@@ -25,6 +25,7 @@ from .telemetry import Telemetry
 from .tools.builtin import build_default_registry
 from .tools.weather import OpenMeteoWeatherProvider
 from .tts.router import TTSRouter
+from .voice_jobs import VoiceJobRepository, VoiceJobWorker
 
 
 @dataclass
@@ -40,6 +41,8 @@ class Application:
     offline: OfflineManager
     conversation: ConversationManager
     telemetry: Telemetry
+    voice_jobs: VoiceJobRepository
+    voice_job_worker: VoiceJobWorker | None = None
 
     @classmethod
     def build(cls, config: AppConfig | None = None, *, database: Database | None = None,
@@ -63,10 +66,15 @@ class Application:
             offline_manager=offline, telemetry=telemetry,
             sessions=SessionStore(max_turns=config.max_history_turns,
                                   idle_timeout_minutes=config.max_session_idle_minutes))
-        return cls(config=config, languages=languages, memory=memory, registry=registry,
-                   llm=llm, tts=tts, asr=asr,
-                   detector=LanguageDetector(languages), offline=offline,
-                   conversation=conversation, telemetry=telemetry)
+        # Shares the same database/migration as MemoryRepository above.
+        voice_jobs = VoiceJobRepository(repository.db)
+        application = cls(config=config, languages=languages, memory=memory, registry=registry,
+                          llm=llm, tts=tts, asr=asr,
+                          detector=LanguageDetector(languages), offline=offline,
+                          conversation=conversation, telemetry=telemetry,
+                          voice_jobs=voice_jobs)
+        application.voice_job_worker = VoiceJobWorker(application, voice_jobs)
+        return application
 
 
 @lru_cache(maxsize=1)

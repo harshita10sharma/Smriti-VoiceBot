@@ -201,6 +201,26 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX IF NOT EXISTS idx_games_user ON games(user_id);
     """,
+    # -- 3 ------------------------------------------------------------------
+    # Async TTS jobs for the voice endpoint. Persisted (not an in-memory
+    # dict) so job state survives a process restart and a status poll always
+    # reflects what actually happened, not what a dead process remembered.
+    """
+    CREATE TABLE IF NOT EXISTS voice_jobs (
+        job_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        session_id TEXT,
+        status TEXT NOT NULL DEFAULT 'queued',
+        language TEXT NOT NULL,
+        response_text TEXT NOT NULL,
+        audio_id TEXT,
+        tts_provider TEXT,
+        error_code TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_voice_jobs_user ON voice_jobs(user_id);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

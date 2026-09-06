@@ -23,7 +23,7 @@ class GeminiLLMProvider(HTTPLLMProvider):
     online = True
     supports_tools = True
 
-    def __init__(self, api_key: str, model: str = 'gemini-2.5-flash', **kwargs: Any) -> None:
+    def __init__(self, api_key: str, model: str = 'gemini-3.6-flash', **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.api_key = api_key
         self.model = model
@@ -43,7 +43,8 @@ class GeminiLLMProvider(HTTPLLMProvider):
             body['systemInstruction'] = {'parts': [{'text': system}]}
         if tools:
             body['tools'] = [{'functionDeclarations': [
-                {'name': t.name, 'description': t.description, 'parameters': t.parameters}
+                {'name': t.name, 'description': t.description,
+                 'parameters': _gemini_schema(t.parameters)}
                 for t in tools
             ]}]
 
@@ -53,6 +54,29 @@ class GeminiLLMProvider(HTTPLLMProvider):
             json=body,
         )
         return _parse(payload, self.model, elapsed_ms(started))
+
+
+# Keys the shared Tool.json_schema() (standard Pydantic JSON Schema) includes
+# that Gemini's function-declaration Schema rejects outright — e.g.
+# `additionalProperties` gets "Unknown name \"additionalProperties\" ...
+# Cannot find field" (HTTP 400), which otherwise looks like the whole
+# provider is unavailable. OpenAI's and Sarvam's tool-calling accept this
+# same shared schema unmodified, so the fix is scoped to Gemini only.
+_GEMINI_UNSUPPORTED_SCHEMA_KEYS = {'additionalProperties'}
+
+
+def _gemini_schema(schema: Any) -> Any:
+    """Strip JSON Schema keys Gemini's parameter validator does not accept.
+
+    Recurses into ``properties``/``items``/``$defs`` etc. so a nested object
+    or array parameter is sanitised the same way as a top-level one.
+    """
+    if isinstance(schema, dict):
+        return {key: _gemini_schema(value) for key, value in schema.items()
+                if key not in _GEMINI_UNSUPPORTED_SCHEMA_KEYS}
+    if isinstance(schema, list):
+        return [_gemini_schema(item) for item in schema]
+    return schema
 
 
 def _to_contents(messages: list[Message]) -> list[dict[str, Any]]:

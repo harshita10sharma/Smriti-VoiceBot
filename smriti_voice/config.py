@@ -70,7 +70,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 class ProviderConfig:
     """Provider selection and credentials.  Keys are read, never written out."""
     llm_provider: str = 'auto'
-    llm_model_gemini: str = 'gemini-2.5-flash'
+    llm_model_gemini: str = 'gemini-3.6-flash'
     llm_model_openai: str = 'gpt-4o-mini'
     llm_model_sarvam: str = 'sarvam-105b'
     llm_model_local: str = ''
@@ -107,7 +107,7 @@ class ProviderConfig:
     def from_env(cls) -> 'ProviderConfig':
         return cls(
             llm_provider=_env_str('SMRITI_LLM_PROVIDER', 'auto'),
-            llm_model_gemini=_env_str('GEMINI_MODEL', 'gemini-2.5-flash'),
+            llm_model_gemini=_env_str('GEMINI_MODEL', 'gemini-3.6-flash'),
             llm_model_openai=_env_str('OPENAI_MODEL', 'gpt-4o-mini'),
             llm_model_sarvam=_env_str('SARVAM_CHAT_MODEL', 'sarvam-105b'),
             llm_model_local=_env_str('SMRITI_LOCAL_LLM_PATH', ''),

@@ -163,3 +163,47 @@ def test_job_preserves_the_requested_language_end_to_end(jobs_client, auth_heade
     response = client.get(f'/v1/voice/jobs/{job_id}', headers=auth_headers)
     assert response.status_code == 200
     assert response.json()['language'] == language
+
+
+# --------------------------------------------------------------------------- #
+# GET /v1/audio/{audio_id} ownership
+# --------------------------------------------------------------------------- #
+# Every audio_id is produced by exactly one path (VoiceJobWorker's call to
+# TTSRouter.synthesize), so the voice_jobs table always knows which user a
+# given audio_id belongs to. These tests exercise that mapping directly,
+# without needing a real TTS provider.
+def test_audio_owner_can_retrieve_their_own_audio(jobs_client, auth_headers):
+    client, app = jobs_client
+    audio_id = app.tts.store.put(b'RIFF....WAVEfmt ' + b'\x00' * 20)
+    job_id = app.voice_jobs.create(user_id='demo-user', session_id=None,
+                                   language='eng', response_text='hi')
+    app.voice_jobs.mark_processing(job_id)
+    app.voice_jobs.mark_completed(job_id, audio_id=audio_id, tts_provider='mock')
+
+    response = client.get(f'/v1/audio/{audio_id}', headers=auth_headers)
+    assert response.status_code == 200
+
+
+def test_audio_belonging_to_a_different_user_is_not_served(jobs_client, two_users, auth_headers):
+    """The core guarantee: demo-user's credential must not be able to fetch
+    audio that was actually generated for a different user, even with the
+    exact correct audio_id."""
+    client, app = jobs_client
+    audio_id = app.tts.store.put(b'RIFF....WAVEfmt ' + b'\x00' * 20)
+    job_id = app.voice_jobs.create(user_id='other-user', session_id=None,
+                                   language='eng', response_text='hi')
+    app.voice_jobs.mark_processing(job_id)
+    app.voice_jobs.mark_completed(job_id, audio_id=audio_id, tts_provider='mock')
+
+    response = client.get(f'/v1/audio/{audio_id}', headers=auth_headers)
+    assert response.status_code == 404
+
+
+def test_audio_with_no_owning_job_is_not_served(jobs_client, auth_headers):
+    """A file that exists on disk but has no voice_jobs row pointing at it
+    (should never happen in the current architecture) must fail closed
+    rather than being served to whoever asks."""
+    client, app = jobs_client
+    audio_id = app.tts.store.put(b'RIFF....WAVEfmt ' + b'\x00' * 20)
+    response = client.get(f'/v1/audio/{audio_id}', headers=auth_headers)
+    assert response.status_code == 404

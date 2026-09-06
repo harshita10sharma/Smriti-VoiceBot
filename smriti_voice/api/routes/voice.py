@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from ...app import Application
 from ...pipeline import VoicePipeline
 from ...schemas import VoiceJobStatusResponse, VoiceResponse
-from ..dependencies import application, authenticated_user_id, request_id, require_api_key
+from ..dependencies import application, authorized_user_ids, request_id, require_api_key
 from ..upload import read_wav_upload
 
 router = APIRouter(tags=['voice'], dependencies=[Depends(require_api_key)])
@@ -29,10 +29,10 @@ async def conversation_voice(
     speak: bool = Form(default=True),
     app: Application = Depends(application),
     rid: str = Depends(request_id),
-    authenticated_id: str = Depends(authenticated_user_id),
+    authorized: frozenset = Depends(authorized_user_ids),
 ) -> VoiceResponse:
-    if user_id != authenticated_id:
-        raise HTTPException(403, 'user_id does not match the authenticated user')
+    if user_id not in authorized:
+        raise HTTPException(403, 'user_id is not authorized for this API credential')
     raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes)
 
     if language and not app.languages.is_known(language):
@@ -51,9 +51,18 @@ async def conversation_voice(
 
 
 @router.get('/v1/audio/{audio_id}')
-def audio(audio_id: str, app: Application = Depends(application)) -> FileResponse:
+def audio(audio_id: str, app: Application = Depends(application),
+         authorized: frozenset = Depends(authorized_user_ids)) -> FileResponse:
     path = app.tts.store.path_for(audio_id)
     if path is None:
+        raise HTTPException(404, 'Audio not found or expired')
+    # Every audio_id in this system is produced by exactly one path (a voice
+    # job's TTS synthesis), so this always resolves for legitimately-issued
+    # ids. An id whose job belongs to a user this credential isn't
+    # authorized for — or that has no owning job at all — is reported the
+    # same as a missing file: fail closed, never serve unattributed audio.
+    job = app.voice_jobs.get_by_audio_id(audio_id)
+    if job is None or job.user_id not in authorized:
         raise HTTPException(404, 'Audio not found or expired')
     return FileResponse(path, media_type='audio/wav', filename=f'{audio_id}.wav')
 
@@ -62,12 +71,13 @@ def audio(audio_id: str, app: Application = Depends(application)) -> FileRespons
 def voice_job_status(
     job_id: str,
     app: Application = Depends(application),
-    authenticated_id: str = Depends(authenticated_user_id),
+    authorized: frozenset = Depends(authorized_user_ids),
 ) -> VoiceJobStatusResponse:
     job = app.voice_jobs.get(job_id)
-    # A job belonging to a different user is reported the same as a missing
-    # one, so a job id cannot be used to probe for other users' job ids.
-    if job is None or job.user_id != authenticated_id:
+    # A job belonging to a user this credential isn't authorized for is
+    # reported the same as a missing one, so a job id cannot be used to
+    # probe for other users' job ids.
+    if job is None or job.user_id not in authorized:
         raise HTTPException(404, 'Job not found')
     return VoiceJobStatusResponse(
         job_id=job.job_id, status=job.status, language=job.language,

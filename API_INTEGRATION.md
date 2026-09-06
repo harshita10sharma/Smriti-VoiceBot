@@ -38,15 +38,19 @@ x-api-key: <your VoiceBot API key>
 calls this API from your server — never embed it in a mobile app binary or
 in browser JavaScript that ships to end users.
 
-**Identity binding.** Each API key is bound server-side to exactly one
-`user_id`. Whatever `user_id` you send in a request **must match the identity
-your key is bound to**, or the request fails with `403` — you cannot use one
-key to read or act on another user's data by changing `user_id` in the JSON
-body. If you have been issued one key per elderly user (the deployment's
-"multi-user mode"), send that user's own key on every request for them. If
-you have been issued a single shared key (the deployment's "single-user
-mode"), it is bound to one fixed `user_id` and can only ever act as that one
-user — ask the operator which mode your deployment uses.
+**Identity binding.** Each API key is bound server-side to either one `user_id`
+or an explicit list of authorized `user_id`s. Whatever `user_id` you send in a
+request **must match (or be a member of) the identities your key is bound
+to**, or the request fails with `403` — you cannot access another user's data
+by changing `user_id` in the JSON body, ever. Three deployment shapes exist,
+and the operator will tell you which one you've been given:
+- **Single-user**: one key, bound to exactly one elder.
+- **One key per patient**: you're issued a separate key per elderly user;
+  send that user's own key for their requests.
+- **Backend allow-list**: one key authorized for several named patients at
+  once (e.g. `["elder-1", "elder-2"]`); send the same key for any of them,
+  with the correct `user_id` in the request — a `user_id` not on that key's
+  list still returns `403`.
 
 This key is generated with:
 
@@ -172,9 +176,79 @@ x-api-key: <your VoiceBot API key>
 ```
 
 Returns `audio/wav` bytes directly, or `404` if the id is invalid, unknown,
-or has expired (default retention: 15 minutes; generate-then-fetch promptly).
-There is no way to list, enumerate or browse audio — you must already hold
-the exact `audio_id` from a prior response.
+has expired (default retention: 15 minutes; generate-then-fetch promptly), or
+belongs to a `user_id` your key isn't authorized for — ownership is enforced
+the same way as everywhere else, so one patient's audio is never served
+against another patient's identity. There is no way to list, enumerate or
+browse audio — you must already hold the exact `audio_id` from a prior
+response.
+
+## Endpoint: caregiver memory sync
+
+Your backend's own database is the source of truth for a patient's family,
+medicines and daily routine. Whenever that data changes, push the **complete
+current set** for that patient:
+
+```
+POST /v1/memory/sync
+Content-Type: application/json
+x-api-key: <your VoiceBot API key>
+
+{
+  "user_id": "elder-1",
+  "family_members": [
+    {"name": "Bina", "relationship": "daughter", "phone_available": true}
+  ],
+  "medicines": [
+    {"name": "Metformin", "dose": "500mg", "schedule": "morning, after food"}
+  ],
+  "daily_routines": [
+    {"time": "08:00", "activity": "breakfast"}
+  ]
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user_id` | string | yes | Must be authorized for your key (see Identity binding above), otherwise `403`. |
+| `family_members[].name` | string | yes | 1–80 characters. |
+| `family_members[].relationship` | string | yes | 1–40 characters, e.g. `"daughter"`. |
+| `family_members[].phone_available` | bool | no, default `false` | **Never send an actual phone number** — see below. |
+| `medicines[].name` | string | yes | 1–80 characters. |
+| `medicines[].dose` | string | no | Free text, e.g. `"500mg"`. |
+| `medicines[].schedule` | string | no | Free text, e.g. `"morning, after food"`. |
+| `daily_routines[].time` | string | no | 24-hour `HH:MM`, e.g. `"08:00"`. Anything else is rejected with `422`. |
+| `daily_routines[].activity` | string | yes | 1–120 characters. |
+
+Any field not listed above — including `phone`, `phone_number`, `mobile`,
+`contact_number`, `telephone`, or any other raw contact value — is **rejected
+with `422`**, not silently dropped. This endpoint only ever accepts
+`phone_available: true/false`; it never stores an actual number, so a family
+member created exclusively through this endpoint cannot be called by the
+voice assistant until a real number is provisioned through whatever other,
+more privileged channel your deployment uses for that (out of scope for this
+API).
+
+**Full replacement, per call, per category.** Each array you send *replaces*
+that patient's entire caregiver-synced dataset for that category — not a
+merge. Sending `"family_members": []` clears all caregiver-synced family
+members for that patient. Data your own backend didn't create (the patient's
+own words, the assistant's notes, seeded demo data) is never touched, no
+matter what you send. Calling this endpoint twice with identical data is a
+no-op — it does not create duplicates. The whole request is atomic: if
+anything fails, nothing for that patient changes.
+
+### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "user_id": "elder-1",
+  "family_members_synced": 1,
+  "medicines_synced": 1,
+  "daily_routines_synced": 1
+}
+```
 
 ## Supported languages
 
@@ -211,11 +285,11 @@ Returns booleans/status only — safe to poll from an uptime monitor.
 |---|---|
 | `400` | Malformed request or unknown language |
 | `401` | Missing or invalid `x-api-key` |
-| `403` | `user_id` does not match the authenticated identity, or a session belongs to another user |
-| `404` | Audio id not found/expired, unknown/not-yours job id, or unknown language code on `/v1/languages/{code}` |
+| `403` | `user_id` is not authorized for the API credential used, or a session belongs to another user |
+| `404` | Audio id not found/expired/not-yours, unknown/not-yours job id, or unknown language code on `/v1/languages/{code}` |
 | `413` | Uploaded WAV exceeds the server's upload limit |
 | `415` | Not a valid/parseable WAV file |
-| `422` | Request failed schema validation (e.g. malformed `user_id`) |
+| `422` | Request failed schema validation — malformed `user_id`, an invalid `daily_routines[].time`, a missing required field, or **any unrecognized field** (this is what rejects a raw phone number sent to `/v1/memory/sync`) |
 | `429` | Rate limit exceeded |
 | `503` | The service is not configured to authenticate requests, or the bound user identity is not configured — this is a deployment misconfiguration, not a client error |
 | `500` | Internal error (VoiceBot/TTS/ASR processing failure); no stack trace or secret is ever included in the body |

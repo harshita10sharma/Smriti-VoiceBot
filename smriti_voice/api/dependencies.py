@@ -1,6 +1,7 @@
 """Shared API dependencies: authentication, rate limiting, request identity."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -58,8 +59,14 @@ def get_limiter(app: Application) -> RateLimiter:
     return _limiter
 
 
-def _parse_api_key_map(raw: str) -> dict[str, str]:
-    """Parse ``SMRITI_API_KEYS`` into ``{api_key: user_id}``.
+def _parse_api_key_map(raw: str) -> dict[str, str | list[str]]:
+    """Parse ``SMRITI_API_KEYS`` into ``{api_key: user_id}`` or
+    ``{api_key: [user_id, ...]}``.
+
+    A string value is the original single-patient-per-key mode. A list value
+    is the backend/multi-patient mode: that one key may act as any of the
+    listed (and only the listed) user ids — an explicit allow-list, never
+    "this key plus any user_id the caller sends."
 
     Raises ``ValueError`` on anything malformed — callers must treat that as a
     fail-closed 503, never as "fall back to single-key mode", so a typo in
@@ -70,11 +77,20 @@ def _parse_api_key_map(raw: str) -> dict[str, str]:
     except ValueError as exc:
         raise ValueError('SMRITI_API_KEYS is not valid JSON') from exc
     if not isinstance(parsed, dict) or not parsed:
-        raise ValueError('SMRITI_API_KEYS must be a non-empty JSON object of {api_key: user_id}')
-    for key, user_id in parsed.items():
-        if not isinstance(key, str) or not isinstance(user_id, str) \
-                or not key.strip() or not user_id.strip():
-            raise ValueError('SMRITI_API_KEYS keys and values must be non-empty strings')
+        raise ValueError('SMRITI_API_KEYS must be a non-empty JSON object of '
+                         '{api_key: user_id} or {api_key: [user_id, ...]}')
+    for key, value in parsed.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError('SMRITI_API_KEYS keys must be non-empty strings')
+        if isinstance(value, str):
+            if not value.strip():
+                raise ValueError('SMRITI_API_KEYS string values must be non-empty')
+        elif isinstance(value, list):
+            if not value or not all(isinstance(v, str) and v.strip() for v in value):
+                raise ValueError('SMRITI_API_KEYS list values must be a non-empty list '
+                                 'of non-empty user id strings')
+        else:
+            raise ValueError('SMRITI_API_KEYS values must be a string or a list of strings')
     return parsed
 
 
@@ -83,14 +99,13 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
 
     Two mutually exclusive modes, chosen by which variable is set:
 
-    - Multi-user (``SMRITI_API_KEYS``, a JSON object of ``{api_key: user_id}``):
-      each key is bound to its own user id. A caller authenticates as exactly
-      the identity its own key maps to — it can never claim a different
-      ``user_id`` in the request body, because every route compares that
-      field against the identity established here (see
-      ``authenticated_user_id`` below and the ``user_id != authenticated_id``
-      checks in the route handlers). This is what lets one backend serve many
-      elderly users through one VoiceBot deployment.
+    - Multi-user (``SMRITI_API_KEYS``, a JSON object). Each key's value is
+      either a single user id (one key, one patient — a caller can never
+      claim a different ``user_id``) or a list of user ids (one backend key,
+      an explicit allow-list of patients — a caller may act as any id in
+      that list, and only those). Either way, ``authorized_user_ids`` below
+      is what every route must check membership against; it is never "this
+      key plus any user_id the caller sends."
     - Single-user (``SMRITI_API_KEY`` + ``SMRITI_AUTH_USER_ID``): one shared
       key bound to one fixed identity — the original design, unchanged, for a
       deployment that serves exactly one elder.
@@ -109,14 +124,31 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
             log.error('smriti_api_keys_misconfigured', fields={'error': str(exc)})
             raise HTTPException(503, 'API authentication is not configured correctly') from exc
 
-        matched_user_id = next(
-            (user_id for key, user_id in key_map.items()
-             if x_api_key and _constant_time_equals(x_api_key, key)),
-            None)
-        if matched_user_id is None:
+        matched_key = None
+        matched_value: str | list[str] | None = None
+        for key, value in key_map.items():
+            if x_api_key and _constant_time_equals(x_api_key, key):
+                matched_key, matched_value = key, value
+                break
+        if matched_value is None:
             raise HTTPException(401, 'Invalid API key')
-        request.state.authenticated_user_id = matched_user_id
-        principal = matched_user_id
+
+        authorized = frozenset(matched_value) if isinstance(matched_value, list) \
+            else frozenset({matched_value})
+        request.state.authorized_user_ids = authorized
+        if len(authorized) == 1:
+            # Single-target key (string form, or a one-element list): fully
+            # backward compatible with authenticated_user_id() and every
+            # route that hasn't been updated to check authorized_user_ids.
+            request.state.authenticated_user_id = next(iter(authorized))
+            principal = next(iter(authorized))
+        else:
+            # A genuinely multi-patient key. Deliberately do NOT set
+            # authenticated_user_id: any route that only knows how to check
+            # a single identity must fail closed (503) rather than guess
+            # which of several authorized patients this request is for.
+            # Rate-limit by the key itself, hashed — never the raw key.
+            principal = 'backend:' + hashlib.sha256(matched_key.encode('utf-8')).hexdigest()[:16]
     else:
         expected = os.getenv(app.config.api_key_env)
         if not expected:
@@ -135,6 +167,7 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
         bound_user_id = (os.getenv('SMRITI_AUTH_USER_ID') or '').strip()
         if bound_user_id:
             request.state.authenticated_user_id = bound_user_id
+            request.state.authorized_user_ids = frozenset({bound_user_id})
             principal = bound_user_id
 
     if not get_limiter(app).check(principal):
@@ -143,12 +176,32 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
 
 
 def authenticated_user_id(request: Request) -> str:
-    """Return the user identity established by the authentication dependency."""
+    """Return the user identity established by the authentication dependency.
+
+    Only meaningful when exactly one identity is authorized (single-user
+    mode, or a single-target multi-user key). A genuinely multi-patient
+    backend key never sets this — see authorized_user_ids below.
+    """
     user_id = getattr(request.state, 'authenticated_user_id', None) or \
         (os.getenv('SMRITI_AUTH_USER_ID') or '').strip()
     if not user_id:
         raise HTTPException(503, 'Authenticated user identity is not configured')
     return user_id
+
+
+def authorized_user_ids(request: Request) -> frozenset[str]:
+    """The set of user ids the authenticated caller may act as.
+
+    Single-user mode and a single-target multi-user key both produce a
+    one-element set. A backend key authorized for several explicit patients
+    produces the full allow-list. Routes must check membership (``in``),
+    never assume there is exactly one. Fails closed (503) if authentication
+    never established any authorization at all — it does not guess.
+    """
+    ids = getattr(request.state, 'authorized_user_ids', None)
+    if not ids:
+        raise HTTPException(503, 'Authenticated user identity is not configured')
+    return ids
 
 
 def _constant_time_equals(left: str, right: str) -> bool:

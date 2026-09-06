@@ -275,3 +275,62 @@ class VoiceJobStatusResponse(BaseModel):
     audio_url: str | None = None
     tts_provider: str | None = None
     error_code: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Caregiver memory synchronisation (POST /v1/memory/sync)
+# --------------------------------------------------------------------------- #
+# extra='forbid' is deliberate here, beyond the usual API convention: it is
+# what rejects a raw phone/phone_number/mobile/etc. field outright, rather
+# than silently ignoring it. This endpoint must never accept a real number.
+class MemorySyncFamilyMember(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=80)
+    relationship: str = Field(min_length=1, max_length=40)
+    phone_available: bool = False
+
+
+class MemorySyncMedicine(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=80)
+    dose: str | None = Field(default=None, max_length=40)
+    schedule: str | None = Field(default=None, max_length=120)
+
+
+class MemorySyncRoutine(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    time: str | None = Field(default=None, max_length=16)
+    activity: str = Field(min_length=1, max_length=120)
+
+    @field_validator('time')
+    @classmethod
+    def _valid_time(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        import re
+        if not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', v):
+            raise ValueError('time must be 24-hour HH:MM, e.g. "08:00"')
+        return v
+
+
+class MemorySyncRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    user_id: str = Field(min_length=1, max_length=64)
+    family_members: list[MemorySyncFamilyMember] = Field(default_factory=list, max_length=200)
+    medicines: list[MemorySyncMedicine] = Field(default_factory=list, max_length=200)
+    daily_routines: list[MemorySyncRoutine] = Field(default_factory=list, max_length=200)
+
+    @field_validator('user_id')
+    @classmethod
+    def _safe_user_id(cls, v: str) -> str:
+        if not all(ch.isalnum() or ch in '-_.' for ch in v):
+            raise ValueError('user_id may only contain letters, digits, -, _ and .')
+        return v
+
+
+class MemorySyncResponse(BaseModel):
+    success: bool = True
+    user_id: str
+    family_members_synced: int
+    medicines_synced: int
+    daily_routines_synced: int

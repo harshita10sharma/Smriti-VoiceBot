@@ -9,10 +9,15 @@ and TTS.
 ## Base URL
 
 ```
-https://<service-name>.onrender.com
+https://<your-tailnet-hostname>.ts.net
 ```
 
-Replace `<service-name>` with the actual Render service name once deployed.
+This deployment runs on a Windows PC and is exposed to the public internet
+via [Tailscale Funnel](https://tailscale.com/kb/1223/funnel), which provides
+the HTTPS certificate and public hostname — there is no separate cloud
+service to name. Ask the operator for the exact hostname currently in use
+(it looks like `desktop-xxxxxxx.tailnetname.ts.net`); it stays stable as
+long as the same device and Tailscale account run the tunnel.
 For local development this is `http://127.0.0.1:8000`.
 
 ## Authentication
@@ -221,7 +226,7 @@ with HTTP `400`.
 ## curl example
 
 ```bash
-curl -X POST https://<service-name>.onrender.com/v1/conversation/voice \
+curl -X POST https://<your-tailnet-hostname>.ts.net/v1/conversation/voice \
   -H "x-api-key: $VOICEBOT_API_KEY" \
   -F "audio_wav=@utterance.wav" \
   -F "user_id=elder-1" \
@@ -229,12 +234,12 @@ curl -X POST https://<service-name>.onrender.com/v1/conversation/voice \
 # -> { "response_text": "...", "job_id": "50f5...", "job_status": "QUEUED", ... }
 
 # Poll until the job is no longer queued/processing:
-curl https://<service-name>.onrender.com/v1/voice/jobs/50f5dc5393764e6b8ade7769e28aca72 \
+curl https://<your-tailnet-hostname>.ts.net/v1/voice/jobs/50f5dc5393764e6b8ade7769e28aca72 \
   -H "x-api-key: $VOICEBOT_API_KEY"
 # -> { "status": "completed", "audio_id": "122a...", "audio_url": "/v1/audio/122a...", ... }
 
 # Then fetch the audio:
-curl https://<service-name>.onrender.com/v1/audio/<audio_id> \
+curl https://<your-tailnet-hostname>.ts.net/v1/audio/<audio_id> \
   -H "x-api-key: $VOICEBOT_API_KEY" \
   -o reply.wav
 ```
@@ -245,7 +250,7 @@ curl https://<service-name>.onrender.com/v1/audio/<audio_id> \
 import time
 import requests
 
-BASE_URL = "https://<service-name>.onrender.com"
+BASE_URL = "https://<your-tailnet-hostname>.ts.net"
 API_KEY = "..."  # from your secret store, never hard-coded
 
 with open("utterance.wav", "rb") as f:
@@ -287,7 +292,7 @@ if audio_bytes:
 ## JavaScript / TypeScript example
 
 ```ts
-const BASE_URL = "https://<service-name>.onrender.com";
+const BASE_URL = "https://<your-tailnet-hostname>.ts.net";
 const API_KEY = process.env.VOICEBOT_API_KEY!; // never bundle this in client-side JS
 
 async function sendUtterance(wavBlob: Blob, userId: string, language?: string) {

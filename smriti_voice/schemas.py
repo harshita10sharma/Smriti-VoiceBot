@@ -253,8 +253,25 @@ class ConversationResponse(BaseModel):
 
 class VoiceResponse(ConversationResponse):
     transcript: str = ''
+    # TTS runs asynchronously: audio_id/audio_available/tts_provider are
+    # never populated on this response. Poll GET /v1/voice/jobs/{job_id}
+    # (job_id is set whenever speak=True and text was produced) until
+    # status is 'completed', then GET /v1/audio/{audio_id}.
+    job_id: str | None = None
+    job_status: str = 'NOT_REQUESTED'  # QUEUED | PROCESSING | COMPLETED | FAILED | NOT_REQUESTED
     audio_id: str | None = None
     audio_url: str | None = None
     audio_available: bool = False
     audio_unavailable_reason: str | None = None
     tts_provider: str | None = None
+
+
+class VoiceJobStatusResponse(BaseModel):
+    """GET /v1/voice/jobs/{job_id}."""
+    job_id: str
+    status: str  # queued | processing | completed | failed
+    language: str
+    audio_id: str | None = None
+    audio_url: str | None = None
+    tts_provider: str | None = None
+    error_code: str | None = None

@@ -2,8 +2,15 @@
 
 Only the network ASR call is stubbed — everything downstream (detection, safety,
 the turn router, tools, TTS routing, the audio store and the HTTP layer) is real.
+
+TTS runs asynchronously (see voice_jobs.py): the POST response carries a
+job_id, and the actual audio is only available once GET
+/v1/voice/jobs/{job_id} reports status 'completed'. `poll_job` below waits
+for that on the caller's behalf, the way a real client would.
 """
 from __future__ import annotations
+
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,7 +57,21 @@ def post_voice(client, headers, **data):
                        files={'audio_wav': ('u.wav', WAV, 'audio/wav')})
 
 
-def test_voice_turn_returns_transcript_action_and_audio(voice_client, auth_headers):
+def poll_job(client, headers, job_id, *, timeout=5.0):
+    """Poll GET /v1/voice/jobs/{job_id} until it reaches a terminal state."""
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        response = client.get(f'/v1/voice/jobs/{job_id}', headers=headers)
+        assert response.status_code == 200, response.text
+        last = response.json()
+        if last['status'] in ('completed', 'failed'):
+            return last
+        time.sleep(0.02)
+    raise AssertionError(f'job {job_id} did not reach a terminal state: {last}')
+
+
+def test_voice_turn_returns_transcript_action_and_job_then_completes(voice_client, auth_headers):
     client, app = voice_client
     response = post_voice(client, auth_headers, language='eng')
     assert response.status_code == 200
@@ -59,29 +80,40 @@ def test_voice_turn_returns_transcript_action_and_audio(voice_client, auth_heade
     assert body['transcript'] == 'open play'
     assert body['kind'] == TurnKind.COMMAND.value
     assert body['action'] == 'OPEN_PLAY' and body['action_accepted'] is True
-    assert body['audio_available'] is True
-    assert body['audio_id'] and body['audio_url'] == f"/v1/audio/{body['audio_id']}"
+    # TTS has not run yet: the response must not claim audio is ready.
+    assert body['audio_available'] is False
+    assert body['audio_id'] is None
+    assert body['job_id']
+    assert body['job_status'] == 'QUEUED'
+    assert body['audio_unavailable_reason'] == 'TTS_PROCESSING'
     assert body['metadata']['asr_provider'] == 'stub'
     assert body['metadata']['asr_latency_ms'] == 42
     assert body['metadata']['total_latency_ms'] >= 0
     # Audio bytes must never appear in the JSON body.
     assert 'audio' not in body
 
+    job = poll_job(client, auth_headers, body['job_id'])
+    assert job['status'] == 'completed'
+    assert job['audio_id'] and job['audio_url'] == f"/v1/audio/{job['audio_id']}"
+
 
 def test_generated_audio_is_fetchable_once_and_is_a_real_wav(voice_client, auth_headers):
     client, _ = voice_client
     body = post_voice(client, auth_headers, language='eng').json()
-    audio = client.get(body['audio_url'], headers=auth_headers)
+    job = poll_job(client, auth_headers, body['job_id'])
+    audio = client.get(job['audio_url'], headers=auth_headers)
     assert audio.status_code == 200
     assert audio.headers['content-type'] == 'audio/wav'
     assert audio.content[:4] == b'RIFF' and audio.content[8:12] == b'WAVE'
 
 
-def test_speak_false_returns_text_only(voice_client, auth_headers):
+def test_speak_false_returns_text_only_with_no_job(voice_client, auth_headers):
     client, _ = voice_client
     body = post_voice(client, auth_headers, language='eng', speak='false').json()
     assert body['audio_available'] is False
     assert body['audio_unavailable_reason'] == 'TTS_NOT_REQUESTED'
+    assert body['job_id'] is None
+    assert body['job_status'] == 'NOT_REQUESTED'
     assert body['response_text']
 
 
@@ -101,6 +133,7 @@ def test_asr_failure_degrades_gracefully(voice_client, auth_headers):
     assert body['kind'] == TurnKind.ERROR.value
     assert body['metadata']['error_code'] == 'ASR_UNAVAILABLE'
     assert body['audio_available'] is False
+    assert body['job_id'] is None                # no TTS job for an ASR failure
     assert 'microphone' in body['response_text'].lower()
 
 
@@ -109,6 +142,7 @@ def test_empty_transcript_is_reported_as_no_speech(voice_client, auth_headers):
     app.asr = StubASR(transcript='   ')
     body = post_voice(client, auth_headers, language='eng').json()
     assert body['metadata']['error_code'] == 'NO_SPEECH_DETECTED'
+    assert body['job_id'] is None
 
 
 def test_asr_error_message_is_in_the_users_language(voice_client, auth_headers):
@@ -126,8 +160,10 @@ def test_unsafe_speech_is_refused_through_the_voice_path(voice_client, auth_head
     assert body['action'] == 'NO_ACTION' and body['action_accepted'] is False
 
 
-def test_assamese_returns_text_but_reports_no_voice(voice_client, auth_headers, monkeypatch):
-    """The whole point of the Assamese gap, exercised over HTTP."""
+def test_assamese_reports_no_voice_once_the_job_fails(voice_client, auth_headers, monkeypatch):
+    """The whole point of the Assamese gap, exercised over HTTP — now via the
+    job's terminal state, since TTS failure is only known once the async job
+    runs."""
     client, app = voice_client
     monkeypatch.setenv('SMRITI_TTS_PROVIDER', 'auto')
     monkeypatch.setenv('SARVAM_API_KEY', 'present-but-never-called')
@@ -143,8 +179,12 @@ def test_assamese_returns_text_but_reports_no_voice(voice_client, auth_headers, 
     body = post_voice(client, auth_headers, language='asm').json()
     assert body['language'] == 'asm'
     assert body['response_text']                       # text is still produced
-    assert body['audio_available'] is False
-    assert body['audio_unavailable_reason'] == 'NO_TTS_PROVIDER_SUPPORTS_LANGUAGE'
+    assert body['job_id']
+
+    job = poll_job(client, auth_headers, body['job_id'])
+    assert job['status'] == 'failed'
+    assert job['error_code'] == 'NO_TTS_PROVIDER_SUPPORTS_LANGUAGE'
+    assert job['audio_id'] is None
 
 
 def test_temporary_upload_file_is_removed(voice_client, auth_headers, tmp_path):

@@ -423,7 +423,8 @@ class ConversationManager:
 
             messages.append(Message('assistant', response.text,
                                     tool_calls=[{'name': call.name, 'arguments': call.arguments,
-                                                 'call_id': call.call_id}
+                                                 'call_id': call.call_id,
+                                                 'thought_signature': call.thought_signature}
                                                 for call in response.tool_calls]))
 
             for call in response.tool_calls:

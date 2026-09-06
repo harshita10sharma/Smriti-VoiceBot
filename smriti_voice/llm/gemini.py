@@ -92,10 +92,18 @@ def _to_contents(messages: list[Message]) -> list[dict[str, Any]]:
             }}]})
             continue
         if message.role == 'assistant' and message.tool_calls:
-            contents.append({'role': 'model', 'parts': [
-                {'functionCall': {'name': call.get('name', ''), 'args': call.get('arguments', {})}}
-                for call in message.tool_calls
-            ]})
+            parts = []
+            for call in message.tool_calls:
+                part: dict[str, Any] = {'functionCall': {
+                    'name': call.get('name', ''), 'args': call.get('arguments', {})}}
+                # Gemini 3.x requires this to be replayed verbatim on the next
+                # turn, or it rejects the request with "Function call is
+                # missing a thought_signature in functionCall parts".
+                signature = call.get('thought_signature')
+                if signature:
+                    part['thoughtSignature'] = signature
+                parts.append(part)
+            contents.append({'role': 'model', 'parts': parts})
             continue
         contents.append({
             'role': 'model' if message.role == 'assistant' else 'user',
@@ -118,7 +126,8 @@ def _parse(payload: dict[str, Any], model: str, latency_ms: int) -> LLMResponse:
             if call:
                 args = call.get('args')
                 tool_calls.append(ToolCall(name=str(call.get('name', '')),
-                                           arguments=args if isinstance(args, dict) else {}))
+                                           arguments=args if isinstance(args, dict) else {},
+                                           thought_signature=part.get('thoughtSignature')))
     return LLMResponse(text=''.join(text_parts).strip(), tool_calls=tool_calls,
                        provider='gemini', model=model, latency_ms=latency_ms,
                        finish_reason=finish_reason)

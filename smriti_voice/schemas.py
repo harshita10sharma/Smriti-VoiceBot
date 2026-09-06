@@ -110,6 +110,10 @@ class ToolCall(BaseModel):
     name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
     call_id: str | None = None
+    # Opaque, provider-specific continuation token (currently only Gemini's
+    # thoughtSignature). Ignored by every other provider; must be replayed
+    # verbatim on the next turn or Gemini's multi-round tool calling breaks.
+    thought_signature: str | None = None
 
     @field_validator('name')
     @classmethod

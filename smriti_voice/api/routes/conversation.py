@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ...app import Application
 from ...schemas import ConversationRequest, ConversationResponse
-from ..dependencies import application, authenticated_user_id, request_id, require_api_key
+from ..dependencies import application, authorized_user_ids, request_id, require_api_key
 
 router = APIRouter(tags=['conversation'], dependencies=[Depends(require_api_key)])
 
@@ -18,9 +18,9 @@ router = APIRouter(tags=['conversation'], dependencies=[Depends(require_api_key)
 def conversation(payload: ConversationRequest,
                  app: Application = Depends(application),
                  rid: str = Depends(request_id),
-                 authenticated_id: str = Depends(authenticated_user_id)) -> ConversationResponse:
-    if payload.user_id != authenticated_id:
-        raise HTTPException(403, 'user_id does not match the authenticated user')
+                 authorized: frozenset = Depends(authorized_user_ids)) -> ConversationResponse:
+    if payload.user_id not in authorized:
+        raise HTTPException(403, 'user_id is not authorized for this API credential')
     language = payload.language
     if language:
         if not app.languages.is_known(language):

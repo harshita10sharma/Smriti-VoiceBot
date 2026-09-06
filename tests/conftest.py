@@ -15,6 +15,18 @@ from smriti_voice.offline.manager import Connectivity  # noqa: E402
 from smriti_voice.tools.weather import StaticWeatherProvider, WeatherReading  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """api/dependencies.py's rate limiter is a process-wide singleton by
+    design (correct for one running server), but that means it also
+    accumulates hits across every test in the whole session. Reset it before
+    each test so test volume/order can never make an unrelated test flake
+    with a real 429 — this changes no production behaviour."""
+    import smriti_voice.api.dependencies as api_dependencies
+    api_dependencies._limiter = None
+    yield
+
+
 @pytest.fixture
 def weather_provider():
     return StaticWeatherProvider(WeatherReading(

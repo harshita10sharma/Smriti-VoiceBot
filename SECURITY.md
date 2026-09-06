@@ -56,6 +56,12 @@ always name a human who can help — the doctor or the caregiver.
 - **Phone numbers are never returned to the model.** Family tools return
   `has_phone_number: true/false`. Dialling happens by contact id through a confirmed
   controlled action.
+- **`POST /v1/memory/sync` never accepts a raw phone number**, only
+  `phone_available: true/false` (any `phone`/`phone_number`/`mobile`/`contact_number`/
+  `telephone` field is rejected outright — the schema forbids unknown fields). A family
+  member created exclusively through this endpoint therefore cannot be called by the
+  voice assistant until a real number is added through the existing, separate,
+  more-privileged path for that — this is a deliberate limitation, not a defect.
 - **Raw audio is never stored by default** (`retain_raw_audio = false`) and is stripped
   from every telemetry event.
 - **Generated speech** lives in a short-lived store (default 15 minutes) behind an opaque
@@ -67,14 +73,32 @@ always name a human who can help — the doctor or the caregiver.
 
 ## Authentication
 
-Protected endpoints require `x-api-key` matching `SMRITI_API_KEY`, compared with
-`hmac.compare_digest`. Personal conversation and voice endpoints additionally require
-`SMRITI_AUTH_USER_ID` to bind that credential to a stable user identity; submitted
-`user_id` values that do not match return **403**. With no key, or no identity on a
-personal endpoint, the service returns **503**, not open access. The legacy command
-endpoint remains API-key-only because it does not access personal data.
+Protected endpoints require `x-api-key`, checked with `hmac.compare_digest`, in one of
+two mutually exclusive modes:
+
+- **Single-user** (`SMRITI_API_KEY` + `SMRITI_AUTH_USER_ID`, the default): one shared key
+  bound to exactly one identity. Submitted `user_id` values that do not match return
+  **403**. This is the current live deployment — one elder per key.
+- **Multi-user / backend** (`SMRITI_API_KEYS`, a JSON object): each key's value is either
+  a single user id (one key, one patient — identical guarantee to single-user mode) or a
+  **list** of user ids — an explicit allow-list letting one backend key act as any of
+  several named patients, and only those. A request's `user_id` is checked for
+  *membership* in that list, never accepted as-is; an id outside the list returns **403**,
+  the same as a mismatched single-user id. Malformed configuration (invalid JSON, an
+  empty list, a non-string entry) fails closed with **503** rather than silently
+  narrowing to single-user behaviour.
+
+With no key configured at all, or no identity/authorization resolvable on a personal
+endpoint, the service returns **503**, not open access. The legacy command endpoint
+remains API-key-only because it does not access personal data.
 `SMRITI_ALLOW_UNAUTHENTICATED=1` exists for local development only and logs a warning at
 startup naming the risk; it does not disable identity binding on personal endpoints.
+
+**Audio ownership**: `GET /v1/audio/{audio_id}` resolves the requested id back to the
+voice job that generated it and checks that job's owner against the caller's authorized
+identities before serving the file — a credential authorized for one patient cannot
+retrieve audio generated for another, even with the exact id. An id with no owning job at
+all is treated as not found, the same as an unauthorized one, rather than served.
 
 A fixed-window rate limiter (default 60/min) sits on the same dependency.
 

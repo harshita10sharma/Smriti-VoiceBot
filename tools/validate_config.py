@@ -114,11 +114,19 @@ def main() -> int:
             check('SMRITI_API_KEYS is valid', False, str(exc))
             key_map = {}
         else:
+            total_identities = sum(1 if isinstance(v, str) else len(v) for v in key_map.values())
+            backend_keys = sum(1 for v in key_map.values() if isinstance(v, list))
             check('SMRITI_API_KEYS is valid', True,
-                  f'{len(key_map)} identity(ies) configured — multi-user mode')
+                  f'{len(key_map)} key(s), {total_identities} authorized identity(ies)'
+                  + (f', {backend_keys} backend/multi-patient key(s)' if backend_keys else '')
+                  + ' — multi-user mode')
+            all_ids: list[str] = []
+            for v in key_map.values():
+                all_ids.extend([v] if isinstance(v, str) else v)
             check('SMRITI_API_KEYS identities are unique',
-                  len(set(key_map.values())) == len(key_map),
-                  'two keys map to the same user id, which is redundant but not unsafe',
+                  len(set(all_ids)) == len(all_ids),
+                  'the same user id appears under more than one key, which is redundant '
+                  'but not unsafe',
                   hard=False)
         if key_set or os.getenv('SMRITI_AUTH_USER_ID', '').strip():
             warnings.append('SMRITI_API_KEYS is set alongside SMRITI_API_KEY/SMRITI_AUTH_USER_ID '

@@ -9,7 +9,7 @@ from .. import __version__
 from ..app import Application, get_application
 from ..exceptions import SmritiError
 from ..logging import configure, get_logger
-from .routes import command, conversation, health, languages, tools, voice
+from .routes import command, conversation, health, languages, memory_sync, tools, voice
 
 log = get_logger('api')
 
@@ -26,7 +26,7 @@ def create_app(application: Application | None = None) -> FastAPI:
     api = FastAPI(title='Smriti Voice API', version=__version__, description=DESCRIPTION)
     api.state.application = application or get_application()
 
-    for module in (health, languages, conversation, voice, tools, command):
+    for module in (health, languages, conversation, voice, tools, command, memory_sync):
         api.include_router(module.router)
 
     @api.exception_handler(SmritiError)

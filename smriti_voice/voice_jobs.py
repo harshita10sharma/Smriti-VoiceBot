@@ -79,6 +79,15 @@ class VoiceJobRepository:
                 'SELECT * FROM voice_jobs WHERE job_id = ?', (job_id,)).fetchone()
         return VoiceJob(**{key: row[key] for key in row.keys()}) if row else None
 
+    def get_by_audio_id(self, audio_id: str) -> VoiceJob | None:
+        """Every audio_id in the system is produced by exactly one code path
+        (VoiceJobWorker._process_one, via TTSRouter.synthesize), so this is
+        how /v1/audio/{id} establishes who actually owns a given file."""
+        with self.db.connect() as connection:
+            row = connection.execute(
+                'SELECT * FROM voice_jobs WHERE audio_id = ?', (audio_id,)).fetchone()
+        return VoiceJob(**{key: row[key] for key in row.keys()}) if row else None
+
     def mark_processing(self, job_id: str) -> bool:
         """Returns False if the job was not in `queued` state — the caller
         must treat that as "someone already handled this" and not proceed,

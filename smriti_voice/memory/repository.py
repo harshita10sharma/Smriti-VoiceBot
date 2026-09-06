@@ -48,6 +48,14 @@ def _prov_values(provenance: Provenance, default_source: str = 'caregiver') -> t
             provenance.confidence, provenance.verification_status)
 
 
+# The marker written to `created_by` for rows created by POST /v1/memory/sync.
+# Full-replace operations are scoped to exactly `source='caregiver' AND
+# created_by=CAREGIVER_SYNC_MARKER`, so they can never touch a row created by
+# any other path (seed data, a user's own words, an assistant's write, or a
+# hypothetical future caregiver channel that isn't this sync endpoint).
+CAREGIVER_SYNC_MARKER = 'memory_sync'
+
+
 class MemoryRepository:
     def __init__(self, database: Database) -> None:
         self.db = database
@@ -385,6 +393,70 @@ class MemoryRepository:
             row = connection.execute('SELECT user_id FROM conversations WHERE session_id = ?',
                                      (session_id,)).fetchone()
         return row['user_id'] if row else None
+
+    # ------------------------------------------------------------------ #
+    # Caregiver memory synchronisation (POST /v1/memory/sync)
+    # ------------------------------------------------------------------ #
+    def sync_caregiver_memory(self, user_id: str, *, family_members: list[FamilyMember],
+                              medicines: list[Medicine],
+                              routines: list[DailyRoutine]) -> tuple[int, int, int]:
+        """Atomically replace this user's caregiver-synced family members,
+        medicines and daily routines in one transaction.
+
+        All three tables are scoped to ``source = 'caregiver' AND
+        created_by = CAREGIVER_SYNC_MARKER`` for both the delete and the
+        insert, so rows from any other source — seed data, a user's own
+        words, an assistant's write, an import, or a caregiver row created
+        outside this endpoint — are never touched. Everything happens on one
+        connection inside one ``with`` block: if any statement raises,
+        ``Database.connect()`` rolls back the whole thing, so a patient is
+        never left partially synchronised.
+        """
+        with self.db.connect() as connection:
+            connection.execute(
+                """DELETE FROM family_members
+                   WHERE user_id = ? AND source = 'caregiver' AND created_by = ?""",
+                (user_id, CAREGIVER_SYNC_MARKER))
+            for member in family_members:
+                connection.execute(
+                    """INSERT INTO family_members (user_id, name, relation, phone,
+                                                   is_trusted_contact, is_primary_contact,
+                                                   lives_in, notes, photo_path,
+                                                   source, created_by, confidence,
+                                                   verification_status)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (member.user_id, member.name, member.relation, member.phone,
+                     int(member.is_trusted_contact), int(member.is_primary_contact),
+                     member.lives_in, member.notes, member.photo_path,
+                     *_prov_values(member.provenance)))
+
+            connection.execute(
+                """DELETE FROM medicines
+                   WHERE user_id = ? AND source = 'caregiver' AND created_by = ?""",
+                (user_id, CAREGIVER_SYNC_MARKER))
+            for medicine in medicines:
+                connection.execute(
+                    """INSERT INTO medicines (user_id, name, dosage, schedule_time, time_of_day,
+                                              instructions, active, prescribed_by,
+                                              source, created_by, confidence, verification_status)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (medicine.user_id, medicine.name, medicine.dosage, medicine.schedule_time,
+                     medicine.time_of_day, medicine.instructions, int(medicine.active),
+                     medicine.prescribed_by, *_prov_values(medicine.provenance)))
+
+            connection.execute(
+                """DELETE FROM daily_routines
+                   WHERE user_id = ? AND source = 'caregiver' AND created_by = ?""",
+                (user_id, CAREGIVER_SYNC_MARKER))
+            for routine in routines:
+                connection.execute(
+                    """INSERT INTO daily_routines (user_id, title, routine_time, day_of_week,
+                                                   notes, source, created_by, confidence,
+                                                   verification_status)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (routine.user_id, routine.title, routine.routine_time, routine.day_of_week,
+                     routine.notes, *_prov_values(routine.provenance)))
+        return len(family_members), len(medicines), len(routines)
 
     # ------------------------------------------------------------------ #
     def record_telemetry(self, *, event_id: str, event_type: str, payload: dict,

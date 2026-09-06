@@ -23,7 +23,7 @@ class GeminiLLMProvider(HTTPLLMProvider):
     online = True
     supports_tools = True
 
-    def __init__(self, api_key: str, model: str = 'gemini-3.6-flash', **kwargs: Any) -> None:
+    def __init__(self, api_key: str, model: str = 'gemini-3.7-flash', **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.api_key = api_key
         self.model = model

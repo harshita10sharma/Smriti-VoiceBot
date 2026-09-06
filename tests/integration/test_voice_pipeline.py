@@ -131,6 +131,10 @@ def test_assamese_returns_text_but_reports_no_voice(voice_client, auth_headers, 
     client, app = voice_client
     monkeypatch.setenv('SMRITI_TTS_PROVIDER', 'auto')
     monkeypatch.setenv('SARVAM_API_KEY', 'present-but-never-called')
+    # This test is specifically about the Sarvam-only Assamese gap; it must
+    # not depend on (or accidentally load) Indic Parler-TTS, which a real
+    # deployment may have enabled and which does cover Assamese.
+    monkeypatch.setenv('SMRITI_INDIC_PARLER_ENABLED', '0')
     from smriti_voice.config import AppConfig
     from smriti_voice.tts.router import TTSRouter
     app.tts = TTSRouter(AppConfig.load(), app.languages)

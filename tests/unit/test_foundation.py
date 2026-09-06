@@ -29,6 +29,11 @@ def test_v41_settings_still_load():
 
 def test_app_config_never_exposes_key_values(monkeypatch):
     monkeypatch.setenv('SARVAM_API_KEY', 'sk_super_secret_value')
+    # This test asserts on presence, not just redaction, so it must not
+    # depend on whether the ambient environment happens to have real
+    # Gemini/OpenAI credentials configured (e.g. a developer's local .env).
+    monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
     config = AppConfig.load()
     exposed = config.providers.configured_providers()
     assert exposed == {'sarvam': True, 'gemini': False, 'openai': False}

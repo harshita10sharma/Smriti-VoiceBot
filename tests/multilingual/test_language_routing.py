@@ -35,6 +35,11 @@ def test_tts_refuses_to_speak_a_language_it_does_not_support(app, monkeypatch):
     from smriti_voice.tts.router import TTSRouter
     monkeypatch.setenv('SMRITI_TTS_PROVIDER', 'auto')
     monkeypatch.setenv('SARVAM_API_KEY', 'not-used-no-call-is-made')
+    # A real deployment may have Indic Parler-TTS enabled, which does cover
+    # Assamese; this test is specifically about the gap when no provider
+    # covers it, so it must not depend on (or accidentally load) whatever
+    # the ambient environment happens to have enabled.
+    monkeypatch.setenv('SMRITI_INDIC_PARLER_ENABLED', '0')
     router = TTSRouter(AppConfig.load(), LanguageService())
     result = router.synthesize('নমস্কাৰ', 'asm')
     assert result.available is False

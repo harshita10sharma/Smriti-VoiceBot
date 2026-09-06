@@ -1,0 +1,41 @@
+# Version control and CI
+.git
+.github
+
+# Secrets — never baked into an image; Render supplies these at runtime
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Runtime data / local state — the image ships code, not data
+runtime/
+logs/
+data/
+audio/responses/
+*.db
+*.db-wal
+*.db-shm
+*.wav
+
+# Downloaded/cached ML models — fetched at runtime via HF_TOKEN, not shipped
+models/
+.cache/
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# This assistant's local scratch state, if present in the tree
+.claude/

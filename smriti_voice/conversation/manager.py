@@ -404,6 +404,8 @@ class ConversationManager:
         llm_latency = 0
         tool_latency = 0
         provider: str | None = None
+        action = Action.NO_ACTION.value
+        action_accepted = False
 
         for _ in range(MAX_TOOL_ROUNDS):
             response = self.llm.generate(messages, system=system, tools=specs,
@@ -417,6 +419,7 @@ class ConversationManager:
                 return TurnOutcome(text=text, kind=(TurnKind.MEMORY if tool_results
                                                     else TurnKind.CONVERSATION),
                                    tool_calls=tool_calls, tool_results=tool_results,
+                                   action=action, action_accepted=action_accepted,
                                    llm_provider=provider, llm_latency_ms=llm_latency,
                                    tool_latency_ms=tool_latency,
                                    fallback_used=self.llm.fallback_used)
@@ -432,6 +435,13 @@ class ConversationManager:
                 result = self.registry.execute(call, principal, context)
                 tool_results.append(result)
                 tool_latency += result.latency_ms
+
+                if result.ok and result.executed:
+                    proposed = (result.data or {}).get('action')
+                    if proposed:
+                        granted = self.gate.authorize(proposed, call.name)
+                        action, action_accepted = granted.action.value, \
+                            granted.action is not Action.NO_ACTION
 
                 if result.requires_confirmation:
                     tool = self.registry.get(call.name)
@@ -456,7 +466,8 @@ class ConversationManager:
         self._remember_subject(session, tool_results)
         return TurnOutcome(text=_text_for(UNCLEAR, language, language),
                            kind=TurnKind.CONVERSATION, tool_calls=tool_calls,
-                           tool_results=tool_results, llm_provider=provider,
+                           tool_results=tool_results, action=action,
+                           action_accepted=action_accepted, llm_provider=provider,
                            llm_latency_ms=llm_latency, tool_latency_ms=tool_latency,
                            error_code='TOOL_ROUND_LIMIT')
 

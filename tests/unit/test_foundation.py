@@ -34,9 +34,10 @@ def test_app_config_never_exposes_key_values(monkeypatch):
     # Gemini/OpenAI credentials configured (e.g. a developer's local .env).
     monkeypatch.delenv('GEMINI_API_KEY', raising=False)
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    monkeypatch.delenv('GROQ_API_KEY', raising=False)
     config = AppConfig.load()
     exposed = config.providers.configured_providers()
-    assert exposed == {'sarvam': True, 'gemini': False, 'openai': False}
+    assert exposed == {'sarvam': True, 'gemini': False, 'openai': False, 'groq': False}
     assert 'sk_super_secret_value' not in str(exposed)
 
 

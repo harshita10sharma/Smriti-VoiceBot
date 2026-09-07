@@ -21,6 +21,7 @@ from ..logging import get_logger
 from ..schemas import LLMResponse
 from .base import LLMProvider, Message, ToolSpec
 from .gemini import GeminiLLMProvider
+from .groq import GroqLLMProvider
 from .local import LocalLLMProvider
 from .mock import MockLLMProvider
 from .openai import OpenAILLMProvider
@@ -54,6 +55,10 @@ class LLMRouter:
                 raise ProviderNotConfigured('GEMINI_API_KEY is not configured')
             provider: LLMProvider = GeminiLLMProvider(providers.gemini_key,
                                                       providers.llm_model_gemini, **common)
+        elif name == 'groq':
+            if not providers.groq_key:
+                raise ProviderNotConfigured('GROQ_API_KEY is not configured')
+            provider = GroqLLMProvider(providers.groq_key, providers.llm_model_groq, **common)
         elif name == 'openai':
             if not providers.openai_key:
                 raise ProviderNotConfigured('OPENAI_API_KEY is not configured')
@@ -86,7 +91,7 @@ class LLMRouter:
     def available(self) -> dict[str, bool]:
         """Which providers could be built right now.  Booleans only."""
         status: dict[str, bool] = {}
-        for name in ('local', 'gemini', 'openai', 'sarvam', 'mock'):
+        for name in ('local', 'gemini', 'openai', 'sarvam', 'groq', 'mock'):
             try:
                 self.build(name)
                 status[name] = True

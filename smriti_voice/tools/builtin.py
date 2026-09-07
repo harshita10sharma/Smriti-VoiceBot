@@ -235,7 +235,8 @@ def _create_reminder(principal: Principal, args: CreateReminderArgs,
         user_id=principal.user_id, text=args.text, remind_at=args.remind_at,
         provenance=provenance_for_write(source='user', created_by=principal.user_id)))
     return {'created': True, 'text': reminder.text, 'remind_at': reminder.remind_at,
-            'verification_status': reminder.provenance.verification_status}
+            'verification_status': reminder.provenance.verification_status,
+            'action': 'CREATE_REMINDER'}
 
 
 def _start_game(principal: Principal, args: StartGameArgs,

@@ -247,3 +247,21 @@ def test_commands_bypass_the_model_entirely(app, utterance, action):
     assert reply.kind is TurnKind.COMMAND
     assert reply.action == action and reply.action_accepted
     assert provider.calls == [], 'a deterministic command reached the model'
+
+
+def test_model_open_app_tool_promotes_action_to_response(app):
+    use_mock_llm(app, script=tool_then_answer('open_app', 'Opening games now.', app='games'))
+    reply = app.conversation.handle(user_id='demo-user', message='Please open games', language='eng')
+    assert reply.action == 'OPEN_PLAY'
+    assert reply.action_accepted is True
+
+
+def test_confirmed_reminder_promotes_action_to_response(app):
+    use_mock_llm(app, script=[tool_call_response('create_reminder', text='Call Bina',
+                                                  remind_at='18:00')])
+    first = app.conversation.handle(user_id='demo-user', message='Remind me to call Bina',
+                                    language='eng')
+    second = app.conversation.handle(user_id='demo-user', message='Yes',
+                                     session_id=first.session_id, language='eng')
+    assert second.action == 'CREATE_REMINDER'
+    assert second.action_accepted is True

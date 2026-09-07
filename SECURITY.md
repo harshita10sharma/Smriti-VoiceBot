@@ -105,6 +105,7 @@ A fixed-window rate limiter (default 60/min) sits on the same dependency.
 ## Secrets
 
 - Credentials come from the environment only. Nothing is hard-coded.
+- The Groq, Gemini, OpenAI, Sarvam and Hugging Face provider keys remain server-side only.
 - `.env` is git-ignored; `.env.example` carries empty placeholders.
 - `/v1/health` and `--test-config` report credentials as **booleans**, never values.
 - Provider error bodies are redacted before they are surfaced, because they can echo the

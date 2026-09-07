@@ -61,7 +61,7 @@ the `open_app` tool — which itself resolves to a v4.1 `Action` and passes the 
 | `audio.py`, `lid.py`, `normalize.py`, `telemetry.py` | Audio quality, NE-LID, text normalisation, JSONL events | **v4.1, unchanged** |
 | `safety/` | Policy, validators, injection detection, authorization, confirmation | New (validators extracted from `intents.py`) |
 | `language/` | Capability matrix, code normalisation, detection | New |
-| `llm/` | Provider abstraction, Gemini/OpenAI/Sarvam/local/mock, routing | New |
+| `llm/` | Provider abstraction, Groq/Gemini/OpenAI/Sarvam/local/mock, routing | New |
 | `tts/` | Sarvam/local/mock, language gating, audio store | New |
 | `memory/` | Models, repository, service, provenance, lexical retrieval, seed | New |
 | `tools/` | Registry, schemas, handlers, weather provider | New |
@@ -80,14 +80,15 @@ touching the conversation logic:
 | Protocol | Implementations |
 |---|---|
 | `ASRProvider` | `SarvamASR`, `OpenAIASR`, `IndicConformerASR`, `NeASR`, `GenericWhisperASR` |
-| `LLMProvider` | `GeminiLLMProvider`, `OpenAILLMProvider`, `SarvamLLMProvider`, `LocalLLMProvider`, `MockLLMProvider` |
+| `LLMProvider` | `GroqLLMProvider`, `GeminiLLMProvider`, `OpenAILLMProvider`, `SarvamLLMProvider`, `LocalLLMProvider`, `MockLLMProvider` |
 | `TTSProvider` | `SarvamTTSProvider`, `LocalTTSProvider`, `MockTTSProvider` |
 | `WeatherProvider` | `OpenMeteoWeatherProvider`, `StaticWeatherProvider` |
 | `EmbeddingProvider` | *declared, not implemented* — lexical retrieval is used today |
 
-Routers (`LLMRouter`, `TTSRouter`, `ASRRouter`) own selection and fallback. An explicitly
-named provider is never silently replaced by another vendor: if it fails, the failure is
-reported.
+Routers (`LLMRouter`, `TTSRouter`, `ASRRouter`) own selection and fallback. The deployment
+explicitly selects Groq with Qwen 3.8 27B; an explicitly named provider is never silently
+replaced by another vendor. Auto mode retains its existing local, Gemini, OpenAI, and
+non-tool Sarvam order.
 
 ## Tool execution
 

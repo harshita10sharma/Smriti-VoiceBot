@@ -30,7 +30,7 @@ user's memory, family, medication, reminders, or session by changing JSON/form f
 
 `GET /v1/health`, `GET /v1/languages` and `GET /v1/languages/{code}` are public. Everything else requires the key.
 
-Provider API keys (Sarvam, Gemini, OpenAI) live on the server only. They must never be compiled into an APK, a Flutter bundle or browser JavaScript.
+Provider API keys (Groq, Sarvam, Gemini, OpenAI) live on the server only. They must never be compiled into an APK, a Flutter bundle or browser JavaScript.
 
 ---
 
@@ -250,8 +250,8 @@ Public. **Never returns a credential** — presence is reported as booleans.
   "connectivity": {"online": false, "detail": "TimeoutError", "forced_offline": false,
                    "checked_seconds_ago": 3},
   "providers": {
-    "credentials_configured": {"sarvam": false, "gemini": false, "openai": false},
-    "llm": {"local": false, "gemini": false, "openai": false, "sarvam": false, "mock": true},
+    "credentials_configured": {"sarvam": false, "gemini": false, "openai": false, "groq": false},
+    "llm": {"local": false, "gemini": false, "openai": false, "sarvam": false, "groq": false, "mock": true},
     "tts": {"sarvam": false, "local": false, "mock": true}
   },
   "capabilities": {

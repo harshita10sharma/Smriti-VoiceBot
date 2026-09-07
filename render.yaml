@@ -41,6 +41,12 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SMRITI_LLM_PROVIDER
+        value: groq
+      - key: GROQ_MODEL
+        value: qwen/qwen3.8-27b
       # --- Indic Parler-TTS: the validated offline path for asm/brx/mni/npi ---
       - key: SMRITI_INDIC_PARLER_ENABLED
         value: "1"

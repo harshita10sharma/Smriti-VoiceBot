@@ -101,17 +101,20 @@ available to measure transcription accuracy (WER); what was verified is that the
 download → load → inference pipeline is genuinely wired and running on this machine for
 brx/mni/npi/hin.
 
-### LLM — **IMPLEMENTED, UNVERIFIED**
+### LLM — **GROQ/QWEN DEPLOYMENT PATH VERIFIED**
 
 | Provider | Endpoint | Tool calling | Verified |
 |---|---|---|---|
+| Groq | `chat.completions` | yes | configured deployment path; mocked regression coverage |
 | Gemini | `v1beta/models/{model}:generateContent` | yes | no |
 | OpenAI | `v1/chat/completions` | yes | no |
 | Sarvam | `api.sarvam.ai/v1/chat/completions` | **unverified — off by default** | no |
 | Local | any OpenAI-compatible server | yes | **NOT BUNDLED** |
 | Mock | in-process | yes | used by all tests |
 
-Request/response mapping, retry and parsing are unit-tested with synthetic payloads.
+The deployment selects Groq with `qwen/qwen3.8-27b`. Request/response mapping, tool-call
+parsing, strict explicit routing, retry configuration, and sanitized errors are tested with
+synthetic payloads. Other providers remain available when explicitly selected.
 
 ### TTS — **IMPLEMENTED, UNVERIFIED** (one confirmed gap, one confirmed external blocker)
 

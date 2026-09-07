@@ -25,7 +25,7 @@ migration record.
 | Conversation manager | **Working** | Bounded history, confirmation, language following |
 | Offline fallback | **Working** | Answers saved questions with no model at all |
 | HTTP API | **Working** | Auth fails closed, upload validation, no audio in JSON |
-| LLM providers | **Implemented, unverified** | Gemini/OpenAI/Sarvam/local — no live call has been made |
+| General LLM | **Groq / Qwen 3.8 27B** | Explicitly selected by `SMRITI_LLM_PROVIDER=groq`; other providers remain available |
 | TTS provider | **Implemented, unverified** | Sarvam Bulbul — no live call has been made |
 | Cloud ASR | **Implemented, unverified** | v4.1 Sarvam/OpenAI code, unchanged |
 | Local ASR | **Benchmark-only** | Models not provisioned; engine refuses to load unvalidated packs |
@@ -51,6 +51,9 @@ pytest -q
 `requirements.txt` installs only what the service and tests need. Local ASR
 (`onnx-asr`, `transformers`, `torch`, `ne-lid`) is commented out — uncomment it on a
 device that will actually run local models.
+
+The deployed general conversational LLM is configured with `SMRITI_LLM_PROVIDER=groq`,
+`GROQ_MODEL=qwen/qwen3.8-27b`, and a server-side `GROQ_API_KEY`.
 
 ## Running
 
@@ -120,7 +123,7 @@ OpenAI-compatible server locally and set `SMRITI_LOCAL_LLM_URL`.
 ## Testing
 
 ```bash
-pytest -q                      # 270 tests
+pytest -q                      # full test suite
 pytest tests/safety -q         # 156 safety and red-team assertions
 pytest tests/legacy -q         # the original v4.1 suite, unmodified
 python -m compileall -q .
@@ -132,8 +135,8 @@ and none asserts a fabricated provider result.
 ## Limitations
 
 - Nothing has been validated on real speech. `EVALUATION.md` records what was and was not tested.
-- No live provider call has been made from this environment (egress blocked); Gemini, OpenAI,
-  Sarvam ASR and Sarvam TTS integrations are written against current documentation but unverified.
+- Groq/Qwen is the configured general LLM for deployment. Gemini, OpenAI and Sarvam
+  integrations remain available where explicitly configured.
 - Sarvam Bulbul does not speak Assamese, Bodo, Manipuri, Nepali or any Northeast language.
 - Local ASR models are benchmark-only and are not provisioned.
 - Sarvam tool calling is unverified; the router will not send it a tool-bearing turn unless

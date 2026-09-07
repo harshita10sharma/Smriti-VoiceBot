@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import json, os
 from dotenv import load_dotenv
 
@@ -73,6 +73,7 @@ class ProviderConfig:
     llm_model_gemini: str = 'gemini-3.7-flash'
     llm_model_openai: str = 'gpt-4o-mini'
     llm_model_sarvam: str = 'sarvam-105b'
+    llm_model_groq: str = 'qwen/qwen3.8-27b'
     llm_model_local: str = ''
     tts_provider: str = 'auto'
     tts_model: str = 'bulbul:v2'
@@ -90,6 +91,10 @@ class ProviderConfig:
     indic_parler_device: str = 'auto'
     indic_parler_languages: str = 'asm,brx,mni,npi'
     indic_parler_description: str = 'a calm, neutral Indian voice'
+
+    @property
+    def groq_key(self) -> str:
+        return _env_str('GROQ_API_KEY')
 
     @property
     def sarvam_key(self) -> str:
@@ -110,6 +115,7 @@ class ProviderConfig:
             llm_model_gemini=_env_str('GEMINI_MODEL', 'gemini-3.7-flash'),
             llm_model_openai=_env_str('OPENAI_MODEL', 'gpt-4o-mini'),
             llm_model_sarvam=_env_str('SARVAM_CHAT_MODEL', 'sarvam-105b'),
+            llm_model_groq=_env_str('GROQ_MODEL', 'qwen/qwen3.8-27b'),
             llm_model_local=_env_str('SMRITI_LOCAL_LLM_PATH', ''),
             tts_provider=_env_str('SMRITI_TTS_PROVIDER', 'auto'),
             tts_model=_env_str('SARVAM_TTS_MODEL', 'bulbul:v2'),
@@ -129,11 +135,12 @@ class ProviderConfig:
         )
 
     def configured_providers(self) -> dict[str, bool]:
-        """Booleans only — this feeds /v1/health and must never leak a key."""
+        """Booleans only â€” this feeds /v1/health and must never leak a key."""
         return {
             'sarvam': bool(self.sarvam_key),
             'gemini': bool(self.gemini_key),
             'openai': bool(self.openai_key),
+            'groq': bool(self.groq_key),
         }
 
 
@@ -179,3 +186,4 @@ class AppConfig:
             max_upload_bytes=s.max_upload_bytes,
             version=__version__,
         )
+

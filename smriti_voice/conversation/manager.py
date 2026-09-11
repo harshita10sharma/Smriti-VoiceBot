@@ -43,8 +43,10 @@ from ..schemas import (
     ToolResult,
     TurnKind,
     TurnMetadata,
+    WelcomeResponse,
 )
 from ..tools.registry import ToolContext, ToolRegistry
+from .classifier import classify_topic
 from .context import ConversationSession, SessionStore
 from .policy import DeterministicResponder
 from .prompts import build_system_prompt, untrusted_block
@@ -120,6 +122,36 @@ CONFIRM_AGAIN: dict[str, str] = {
 
 PRONOUNS = ('she', 'he', 'her', 'him', 'his', 'they', 'them')
 
+# A deterministic, non-LLM proactive greeting (see ConversationManager.welcome
+# below). Reviewed for the same four languages as every other templated
+# reply in this module; anything else falls back to English rather than
+# guessing a translation.
+WELCOME_TEXT: dict[str, str] = {
+    'eng': 'Hello{name}. I am here with you. Whenever you are ready, just tap and speak.',
+    'hin': 'नमस्ते{name}। मैं आपके साथ हूँ। जब आप तैयार हों, टैप करके बोलिए।',
+    'asm': 'নমস্কাৰ{name}। মই আপোনাৰ লগত আছোঁ। যেতিয়া মন যায়, টিপি কথা কওক।',
+    'ben': 'নমস্কার{name}। আমি আপনার পাশে আছি। যখন ইচ্ছা, চাপ দিয়ে বলুন।',
+}
+
+
+def _welcome_text(language: str, user_name: str | None) -> str:
+    template = WELCOME_TEXT.get(language, WELCOME_TEXT['eng'])
+    clause = f', {user_name}' if user_name else ''
+    return template.format(name=clause)
+
+
+@dataclass
+class WelcomeOutcome:
+    """What ConversationManager.welcome() produces. The API route layer
+    (api/routes/conversation.py) is responsible for turning ``text`` into a
+    WelcomeResponse and, if the caller asked for speech, queuing a TTS job
+    the same way the voice pipeline already does -- welcome() itself has no
+    opinion about audio."""
+    session_id: str
+    text: str
+    language: str
+    restored: bool
+
 
 def _text_for(table: dict[str, dict[str, str]] | dict[str, str], key: str,
               language: str) -> str:
@@ -155,6 +187,7 @@ class TurnOutcome:
     tool_latency_ms: int = 0
     fallback_used: bool = False
     error_code: str | None = None
+    topic: str | None = None
 
 
 class ConversationManager:
@@ -225,7 +258,7 @@ class ConversationManager:
             llm_provider=outcome.llm_provider, llm_latency_ms=outcome.llm_latency_ms,
             tool_latency_ms=outcome.tool_latency_ms,
             total_latency_ms=int((time.perf_counter() - started) * 1000),
-            error_code=outcome.error_code)
+            error_code=outcome.error_code, topic=outcome.topic)
 
         self._persist(session, message, outcome, metadata)
 
@@ -235,6 +268,32 @@ class ConversationManager:
             action_accepted=outcome.action_accepted, tool_calls=outcome.tool_calls,
             tool_results=outcome.tool_results, safety=outcome.safety,
             requires_confirmation=outcome.requires_confirmation, metadata=metadata)
+
+    # ------------------------------------------------------------------ #
+    def welcome(self, *, user_id: str, session_id: str | None = None,
+               language: str | None = None) -> WelcomeOutcome:
+        """A proactive first message for opening the app.
+
+        Deliberately does none of what a real turn does: no injection/safety
+        screen (there is no user utterance), no LLM call, no tool call, no
+        action, and no write to conversation_turns or the session's turn
+        history -- so calling this does not consume or discard the user's
+        actual first spoken/typed message, and calling it twice (e.g. the
+        client re-opening the app against the same session) is a pure,
+        side-effect-free read beyond touching the session's activity clock.
+        Text is entirely deterministic (see WELCOME_TEXT above), never
+        LLM-generated, so this never "fills in" the model's voice with
+        something it didn't actually say.
+        """
+        existed_before = bool(session_id) and self.sessions.exists(session_id)
+        session = self.sessions.get_or_create(session_id, user_id, language or 'eng')
+        restored = existed_before and session.session_id == session_id
+        turn_language = language or session.language or 'eng'
+        session.language = turn_language
+        user = self.memory.repo.get_user(user_id)
+        text = _welcome_text(turn_language, user.display_name if user else None)
+        return WelcomeOutcome(session_id=session.session_id, text=text,
+                              language=turn_language, restored=restored)
 
     # ------------------------------------------------------------------ #
     def _route(self, message: str, *, session: ConversationSession, principal: Principal,
@@ -392,8 +451,13 @@ class ConversationManager:
     def _converse(self, message: str, *, session: ConversationSession, principal: Principal,
                   language: str, request_id: str, offline: bool) -> TurnOutcome:
         user = self.memory.repo.get_user(principal.user_id)
+        # A deterministic, narrow hint only -- see conversation/classifier.py.
+        # Safety/action routing already happened in _route() before this
+        # method was ever called; this cannot change or bypass any of that.
+        topic = classify_topic(message)
         system = build_system_prompt(language, offline=offline,
-                                     user_name=user.display_name if user else None)
+                                     user_name=user.display_name if user else None,
+                                     topic=topic)
         specs: list[ToolSpec] = self.registry.specs()
         messages = self._history_messages(session)
         context = self._context(language=language, request_id=request_id,
@@ -422,7 +486,7 @@ class ConversationManager:
                                    action=action, action_accepted=action_accepted,
                                    llm_provider=provider, llm_latency_ms=llm_latency,
                                    tool_latency_ms=tool_latency,
-                                   fallback_used=self.llm.fallback_used)
+                                   fallback_used=self.llm.fallback_used, topic=topic)
 
             messages.append(Message('assistant', response.text,
                                     tool_calls=[{'name': call.name, 'arguments': call.arguments,
@@ -455,7 +519,8 @@ class ConversationManager:
                     return TurnOutcome(text=pending.prompt, kind=TurnKind.CONFIRMATION,
                                        tool_calls=tool_calls, tool_results=tool_results,
                                        requires_confirmation=True, llm_provider=provider,
-                                       llm_latency_ms=llm_latency, tool_latency_ms=tool_latency)
+                                       llm_latency_ms=llm_latency, tool_latency_ms=tool_latency,
+                                       topic=topic)
 
                 payload = (result.data if result.ok else
                            {'error': result.error, 'error_code': result.error_code})
@@ -469,7 +534,7 @@ class ConversationManager:
                            tool_results=tool_results, action=action,
                            action_accepted=action_accepted, llm_provider=provider,
                            llm_latency_ms=llm_latency, tool_latency_ms=tool_latency,
-                           error_code='TOOL_ROUND_LIMIT')
+                           error_code='TOOL_ROUND_LIMIT', topic=topic)
 
     def _history_messages(self, session: ConversationSession) -> list[Message]:
         """Bounded history only: never the whole transcript."""

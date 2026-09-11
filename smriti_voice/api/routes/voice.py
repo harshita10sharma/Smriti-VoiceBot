@@ -13,9 +13,17 @@ from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
 from ...app import Application
+from ...idempotency import payload_hash
 from ...pipeline import VoicePipeline
 from ...schemas import VoiceJobStatusResponse, VoiceResponse
-from ..dependencies import application, authorized_user_ids, request_id, require_api_key
+from ..dependencies import (
+    application,
+    authorized_user_ids,
+    ensure_patient_active,
+    idempotency_key,
+    request_id,
+    require_api_key,
+)
 from ..upload import read_wav_upload
 
 router = APIRouter(tags=['voice'], dependencies=[Depends(require_api_key)])
@@ -30,24 +38,47 @@ async def conversation_voice(
     app: Application = Depends(application),
     rid: str = Depends(request_id),
     authorized: frozenset = Depends(authorized_user_ids),
+    idem_key: str | None = Depends(idempotency_key),
 ) -> VoiceResponse:
     if user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
+    ensure_patient_active(app, user_id)
     raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes)
 
     if language and not app.languages.is_known(language):
         raise HTTPException(400, f'Unknown language: {language!r}')
+
+    # Optional: same exactly-once guarantee as the text endpoint, keyed on
+    # the raw audio bytes so a client retry of the same recording after a
+    # timeout cannot run ASR/conversation/tool-execution a second time.
+    if idem_key:
+        hash_value = payload_hash(user_id, session_id or '', language or '', speak, raw)
+        outcome = app.idempotency.begin(user_id, idem_key, hash_value)
+        if outcome.status == 'conflict':
+            raise HTTPException(409, 'Idempotency-Key was already used for a different request body')
+        if outcome.status == 'in_progress':
+            raise HTTPException(409, 'A request with this Idempotency-Key is already being processed')
+        if outcome.status == 'replay':
+            return VoiceResponse.model_validate_json(outcome.response_json)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as handle:
         handle.write(raw)
         path = Path(handle.name)
     try:
         pipeline = VoicePipeline(app)
-        return await run_in_threadpool(pipeline.process, path, user_id=user_id,
-                                       session_id=session_id, language=language,
-                                       request_id=rid, speak=speak)
+        result = await run_in_threadpool(pipeline.process, path, user_id=user_id,
+                                         session_id=session_id, language=language,
+                                         request_id=rid, speak=speak)
+    except Exception:
+        if idem_key:
+            app.idempotency.abandon(user_id, idem_key)
+        raise
     finally:
         path.unlink(missing_ok=True)
+
+    if idem_key:
+        app.idempotency.complete(user_id, idem_key, result.model_dump_json())
+    return result
 
 
 @router.get('/v1/audio/{audio_id}')

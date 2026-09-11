@@ -114,6 +114,26 @@ class VoiceJobRepository:
                    WHERE job_id = ?""",
                 (FAILED, error_code, job_id))
 
+    def recover_stale_jobs(self) -> int:
+        """Call once, at process startup, before the worker thread accepts
+        any new submissions.
+
+        A job left ``queued``/``processing`` in the database was orphaned by
+        a previous process crash or restart: the in-memory queue that would
+        have driven it to completion no longer exists, and nothing else will
+        ever pick it up (see the module docstring). Left alone, a client
+        polling that job id would see "processing" forever. Since this runs
+        before this process has submitted anything of its own, every row in
+        one of those two states at this moment is unambiguously orphaned,
+        not a job actually in flight.
+        """
+        with self.db.connect() as connection:
+            cursor = connection.execute(
+                """UPDATE voice_jobs SET status = ?, error_code = ?, updated_at = datetime('now')
+                   WHERE status IN (?, ?)""",
+                (FAILED, 'INTERRUPTED_BY_RESTART', QUEUED, PROCESSING))
+            return cursor.rowcount
+
 
 class VoiceJobWorker:
     """One background thread, one job at a time, forever.
@@ -123,15 +143,33 @@ class VoiceJobWorker:
     the next job — there is exactly one Application per process anyway.
     """
 
-    def __init__(self, application: 'Application', jobs: VoiceJobRepository) -> None:
+    def __init__(self, application: 'Application', jobs: VoiceJobRepository, *,
+                 queue_max: int = 200) -> None:
         self.app = application
         self.jobs = jobs
-        self._queue: 'queue.Queue[str]' = queue.Queue()
+        # Bounded: an unbounded queue on a single CPU-serialized worker (see
+        # module docstring) would let a burst of requests accumulate
+        # forever with no client-visible signal. A full queue is reported to
+        # the caller as a real, immediate failure instead.
+        self._queue: 'queue.Queue[str]' = queue.Queue(maxsize=max(1, queue_max))
         self._thread = threading.Thread(target=self._run, name='voice-tts-worker', daemon=True)
         self._thread.start()
 
-    def submit(self, job_id: str) -> None:
-        self._queue.put(job_id)
+    def submit(self, job_id: str) -> bool:
+        """Returns False (and marks the job failed) if the queue is full.
+        Callers that ignore the return value keep the old behaviour for an
+        unbounded/lightly-loaded deployment; a caller that wants to surface
+        overload to the client can check it."""
+        try:
+            self._queue.put_nowait(job_id)
+            return True
+        except queue.Full:
+            log.warning('voice_job_queue_overloaded', fields={'job_id': job_id})
+            try:
+                self.jobs.mark_failed(job_id, error_code='QUEUE_OVERLOADED')
+            except Exception:
+                pass
+            return False
 
     def _run(self) -> None:
         while True:

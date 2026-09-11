@@ -36,6 +36,11 @@ class User(BaseModel):
     location: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    # A caregiver/backend can disable a patient without revoking their API
+    # key's allow-list membership (that stays a separate, operator-owned
+    # config change). Defaults True so every existing/newly-created user is
+    # unaffected unless something explicitly disables them.
+    active: bool = True
 
 
 class FamilyMember(BaseModel):

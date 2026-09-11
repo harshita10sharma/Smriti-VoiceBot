@@ -22,7 +22,7 @@ from ...memory.models import DailyRoutine, FamilyMember, Medicine
 from ...memory.provenance import provenance_for_write
 from ...memory.repository import CAREGIVER_SYNC_MARKER
 from ...schemas import MemorySyncRequest, MemorySyncResponse
-from ..dependencies import application, authorized_user_ids, require_api_key
+from ..dependencies import application, authorized_user_ids, ensure_patient_active, require_api_key
 
 log = get_logger('api.memory_sync')
 
@@ -39,6 +39,7 @@ def memory_sync(
 ) -> MemorySyncResponse:
     if payload.user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
+    ensure_patient_active(app, payload.user_id)
 
     provenance = provenance_for_write(source=SYNC_SOURCE, created_by=CAREGIVER_SYNC_MARKER)
 

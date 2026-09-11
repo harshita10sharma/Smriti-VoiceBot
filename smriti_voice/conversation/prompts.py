@@ -73,17 +73,46 @@ real time, date or weather.
 - One tool at a time is enough. After you get the result, answer in {language_name}.
 """
 
+# Appended based on conversation/classifier.py's deterministic, narrow
+# PERSONAL/GENERAL hint. Behaviour guidance only -- nothing here is a
+# safety mechanism; the tool registry's own gates are what actually enforce
+# anything (see tools/registry.py, safety/authorization.py).
+PERSONAL_TOPIC_HINT = """
+This question looks like it is about the user's own life: their family, meals, \
+medicines, schedule, appointments, visitors, reminders or games. Call the matching \
+tool before you answer. Never guess a name, a dose or a time.
+"""
+
+GENERAL_TOPIC_HINT = """
+This question looks like general knowledge -- a fact, a recipe, a definition, an \
+explanation about the world -- rather than something about this person's own saved \
+data. Answer it directly and fully from your own knowledge. Do not say you do not \
+have this written down, and do not suggest asking a caregiver: that response is only \
+for questions about this specific person's own information, not for general \
+knowledge questions like this one.
+"""
+
 
 def build_system_prompt(language: str, *, offline: bool = False,
                         tools_available: bool = True,
-                        user_name: str | None = None) -> str:
-    """Compose the system prompt for one turn."""
+                        user_name: str | None = None,
+                        topic: str | None = None) -> str:
+    """Compose the system prompt for one turn.
+
+    ``topic`` is 'personal' or 'general' (see conversation/classifier.py),
+    or None to omit the hint entirely (e.g. the deterministic offline
+    fallback, which never calls this).
+    """
     name = LANGUAGE_NAMES.get(language, 'the language the user just used')
     prompt = BASE_SYSTEM_PROMPT.format(language_name=name)
     if tools_available:
         prompt += TOOL_NOTE.format(language_name=name)
     if offline:
         prompt += OFFLINE_NOTE
+    if topic == 'personal':
+        prompt += PERSONAL_TOPIC_HINT
+    elif topic == 'general':
+        prompt += GENERAL_TOPIC_HINT
     if user_name:
         prompt += f'\nThe person you are speaking to is called {user_name}.\n'
     return prompt

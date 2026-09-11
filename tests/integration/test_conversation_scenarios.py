@@ -265,3 +265,40 @@ def test_confirmed_reminder_promotes_action_to_response(app):
                                      session_id=first.session_id, language='eng')
     assert second.action == 'CREATE_REMINDER'
     assert second.action_accepted is True
+
+
+# --------------------------------------------------------------------------- #
+# PHASE 7 regression: general knowledge must never fall into the
+# personal-memory-missing / "ask your caregiver" fallback. See
+# smriti_voice/conversation/classifier.py and prompts.py's
+# GENERAL_TOPIC_HINT / PERSONAL_TOPIC_HINT.
+# --------------------------------------------------------------------------- #
+def test_general_knowledge_recipe_question_is_answered_not_deflected(app):
+    provider = use_mock_llm(
+        app, reply='You can make a simple khar with raw papaya, mustard oil and soda.')
+    reply = app.conversation.handle(user_id='demo-user',
+                                    message='Tell me an Assamese recipe.', language='eng')
+    assert reply.kind is TurnKind.CONVERSATION
+    assert 'do not have that written down' not in reply.response_text.lower()
+    assert 'ask your caregiver' not in reply.response_text.lower()
+    assert 'This question looks like general knowledge' in provider.calls[-1]['system']
+    assert 'This question looks like it is about the user' not in provider.calls[-1]['system']
+
+
+def test_general_medicine_knowledge_question_gets_general_hint(app):
+    provider = use_mock_llm(app, reply='Metformin is a medicine used to manage blood sugar.')
+    reply = app.conversation.handle(user_id='demo-user', message='What is Metformin?',
+                                    language='eng')
+    assert reply.kind is TurnKind.CONVERSATION
+    assert 'This question looks like general knowledge' in provider.calls[-1]['system']
+
+
+def test_personal_medicine_question_gets_personal_hint_and_calls_a_tool(app):
+    provider = use_mock_llm(app, script=tool_then_answer(
+        'get_medication_schedule', 'Your medicine tonight is Amlodipine.'))
+    reply = app.conversation.handle(user_id='demo-user',
+                                    message='What medicine do I take tonight?', language='eng')
+    assert reply.kind is TurnKind.MEMORY
+    assert [call.name for call in reply.tool_calls] == ['get_medication_schedule']
+    first_call_system = provider.calls[0]['system']
+    assert 'This question looks like it is about the user' in first_call_system

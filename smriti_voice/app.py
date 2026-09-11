@@ -14,6 +14,7 @@ from .config import AppConfig
 from .conversation.context import SessionStore
 from .conversation.manager import ConversationManager
 from .database import Database
+from .idempotency import IdempotencyStore
 from .language.detector import LanguageDetector
 from .language.registry import LanguageService
 from .llm.router import LLMRouter
@@ -42,6 +43,7 @@ class Application:
     conversation: ConversationManager
     telemetry: Telemetry
     voice_jobs: VoiceJobRepository
+    idempotency: IdempotencyStore
     voice_job_worker: VoiceJobWorker | None = None
 
     @classmethod
@@ -68,12 +70,19 @@ class Application:
                                   idle_timeout_minutes=config.max_session_idle_minutes))
         # Shares the same database/migration as MemoryRepository above.
         voice_jobs = VoiceJobRepository(repository.db)
+        # Any job still queued/processing at this exact moment belongs to a
+        # previous process that crashed or was restarted -- nothing has been
+        # submitted to this process's worker yet, so it cannot be a job
+        # actually in flight. See VoiceJobRepository.recover_stale_jobs.
+        voice_jobs.recover_stale_jobs()
+        idempotency = IdempotencyStore(repository.db, ttl_hours=config.idempotency_ttl_hours)
         application = cls(config=config, languages=languages, memory=memory, registry=registry,
                           llm=llm, tts=tts, asr=asr,
                           detector=LanguageDetector(languages), offline=offline,
                           conversation=conversation, telemetry=telemetry,
-                          voice_jobs=voice_jobs)
-        application.voice_job_worker = VoiceJobWorker(application, voice_jobs)
+                          voice_jobs=voice_jobs, idempotency=idempotency)
+        application.voice_job_worker = VoiceJobWorker(application, voice_jobs,
+                                                       queue_max=config.voice_job_queue_max)
         return application
 
 

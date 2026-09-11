@@ -46,6 +46,7 @@ class TurnKind(str, Enum):
     REFUSAL = 'REFUSAL'                # safety layer refused
     FALLBACK = 'FALLBACK'              # deterministic offline answer, no LLM
     ERROR = 'ERROR'
+    WELCOME = 'WELCOME'                # deterministic proactive greeting, no LLM, no user turn
 
 
 class SafetyLevel(str, Enum):
@@ -216,6 +217,43 @@ class ConversationRequest(BaseModel):
         return v
 
 
+class WelcomeRequest(BaseModel):
+    """POST /v1/conversation/welcome -- open the app, get a proactive first
+    message with no meaningless ASR/text turn required. Never consumes a
+    user turn: no ``message`` field exists because none is expected."""
+    user_id: str = Field(min_length=1, max_length=64)
+    session_id: str | None = Field(default=None, max_length=64)
+    language: str | None = Field(default=None, max_length=16)
+    speak: bool = False
+
+    @field_validator('user_id', 'session_id')
+    @classmethod
+    def _safe_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not all(ch.isalnum() or ch in '-_.' for ch in v):
+            raise ValueError('identifier may only contain letters, digits, -, _ and .')
+        return v
+
+
+class WelcomeResponse(BaseModel):
+    request_id: str
+    session_id: str
+    response_text: str
+    language: str
+    kind: TurnKind = TurnKind.WELCOME
+    session_restored: bool = False
+    # Same async-TTS shape as VoiceResponse, so a client already handling
+    # that flow needs no new logic to handle this one.
+    job_id: str | None = None
+    job_status: str = 'NOT_REQUESTED'
+    audio_id: str | None = None
+    audio_url: str | None = None
+    audio_available: bool = False
+    audio_unavailable_reason: str | None = None
+    tts_provider: str | None = None
+
+
 class TurnMetadata(BaseModel):
     """Everything measurable about one turn.  Mirrors the telemetry record."""
     request_id: str
@@ -233,6 +271,10 @@ class TurnMetadata(BaseModel):
     tts_latency_ms: int = 0
     total_latency_ms: int = 0
     error_code: str | None = None
+    # 'personal' | 'general' | None -- see conversation/classifier.py. Purely
+    # observational (telemetry/debugging); additive field, never read by any
+    # existing client.
+    topic: str | None = None
 
 
 class ConversationResponse(BaseModel):

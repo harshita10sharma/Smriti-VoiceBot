@@ -69,24 +69,52 @@ class MemoryRepository:
         with self.db.connect() as connection:
             connection.execute(
                 """INSERT INTO users (user_id, display_name, preferred_language, location,
-                                      latitude, longitude)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                                      latitude, longitude, active)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
                        display_name=excluded.display_name,
                        preferred_language=excluded.preferred_language,
                        location=excluded.location,
                        latitude=excluded.latitude,
                        longitude=excluded.longitude,
+                       active=excluded.active,
                        updated_at=datetime('now')""",
                 (user.user_id, user.display_name, user.preferred_language, user.location,
-                 user.latitude, user.longitude))
+                 user.latitude, user.longitude, int(user.active)))
         return user
 
     def get_user(self, user_id: str) -> User | None:
         with self.db.connect() as connection:
             row = connection.execute('SELECT * FROM users WHERE user_id = ?', (user_id,)).fetchone()
-        return User(**{k: row[k] for k in ('user_id', 'display_name', 'preferred_language',
-                                           'location', 'latitude', 'longitude')}) if row else None
+        if row is None:
+            return None
+        fields = {k: row[k] for k in ('user_id', 'display_name', 'preferred_language',
+                                      'location', 'latitude', 'longitude')}
+        fields['active'] = bool(row['active']) if 'active' in row.keys() else True
+        return User(**fields)
+
+    def is_user_active(self, user_id: str) -> bool:
+        """True if the patient may be served: either not yet provisioned at
+        all (a normal, expected state before a first caregiver sync or a
+        first conversation turn -- absence of a row is never treated as
+        "denied") or provisioned with ``active`` not explicitly cleared."""
+        user = self.get_user(user_id)
+        return True if user is None else user.active
+
+    def ensure_user_provisioned(self, user_id: str, *, default_display_name: str | None = None) -> None:
+        """Idempotent provisioning: create a bare user row if one does not
+        already exist. Never overwrites an existing row (unlike
+        ``upsert_user``), so this is safe to call on every request without
+        risk of clobbering a caregiver-set display name. Provisioning a
+        user_id does not by itself authorize anything -- that remains
+        entirely the API key's allow-list, checked before this is ever
+        called."""
+        with self.db.connect() as connection:
+            connection.execute(
+                """INSERT INTO users (user_id, display_name)
+                   VALUES (?, ?)
+                   ON CONFLICT(user_id) DO NOTHING""",
+                (user_id, default_display_name or user_id))
 
     # ------------------------------------------------------------------ #
     # Family
@@ -413,6 +441,18 @@ class MemoryRepository:
         never left partially synchronised.
         """
         with self.db.connect() as connection:
+            # A caregiver may sync a patient's data before that patient has
+            # ever opened a conversation. Provision the bare `users` row in
+            # the same transaction rather than requiring a separate call --
+            # without this, the first sync for a brand-new patient hits a
+            # foreign-key violation on every insert below. This is
+            # provisioning only, never authorization: the route already
+            # checked the caller's API-key allow-list before reaching here.
+            connection.execute(
+                """INSERT INTO users (user_id, display_name)
+                   VALUES (?, ?)
+                   ON CONFLICT(user_id) DO NOTHING""",
+                (user_id, user_id))
             connection.execute(
                 """DELETE FROM family_members
                    WHERE user_id = ? AND source = 'caregiver' AND created_by = ?""",

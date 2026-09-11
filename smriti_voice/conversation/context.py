@@ -122,5 +122,11 @@ class SessionStore:
     def drop(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
 
+    def exists(self, session_id: str) -> bool:
+        """True if this exact session_id is currently tracked (not expired,
+        not evicted). Used to report whether a welcome/session-init call
+        restored an existing session or started a fresh one."""
+        return session_id in self._sessions
+
     def __len__(self) -> int:
         return len(self._sessions)

@@ -162,6 +162,8 @@ class AppConfig:
     api_key_env: str
     rate_limit_per_minute: int
     max_upload_bytes: int
+    voice_job_queue_max: int
+    idempotency_ttl_hours: int
     version: str
 
     @classmethod
@@ -184,6 +186,8 @@ class AppConfig:
             api_key_env=s.api_key_env,
             rate_limit_per_minute=_env_int('SMRITI_RATE_LIMIT_PER_MINUTE', 60),
             max_upload_bytes=s.max_upload_bytes,
+            voice_job_queue_max=_env_int('SMRITI_VOICE_JOB_QUEUE_MAX', 200),
+            idempotency_ttl_hours=_env_int('SMRITI_IDEMPOTENCY_TTL_HOURS', 24),
             version=__version__,
         )
 

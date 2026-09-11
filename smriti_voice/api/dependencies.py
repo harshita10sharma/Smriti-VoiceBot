@@ -207,3 +207,29 @@ def authorized_user_ids(request: Request) -> frozenset[str]:
 def _constant_time_equals(left: str, right: str) -> bool:
     import hmac
     return hmac.compare_digest(left.encode('utf-8'), right.encode('utf-8'))
+
+
+def idempotency_key(x_idempotency_key: str | None = Header(default=None)) -> str | None:
+    """An optional client-supplied key for POST /v1/conversation and
+    POST /v1/conversation/voice (see smriti_voice/idempotency.py). A
+    malformed value is treated as absent rather than rejected outright --
+    this feature is purely additive, so a client that gets it slightly
+    wrong should fall back to "no idempotency protection", never to an
+    error the old contract never had."""
+    if not x_idempotency_key:
+        return None
+    key = x_idempotency_key.strip()
+    if not key or len(key) > 128 or not all(ch.isalnum() or ch in '-_.:' for ch in key):
+        return None
+    return key
+
+
+def ensure_patient_active(app: Application, user_id: str) -> None:
+    """Deny a caregiver/backend-disabled patient even though the caller's
+    API key still authorizes that user_id -- authorization (the key's
+    allow-list) and provisioning/account-status are deliberately separate
+    concerns. A user_id with no row at all is never treated as denied here:
+    that is the normal state before a first caregiver sync or a first
+    conversation turn, not a disabled account."""
+    if not app.memory.repo.is_user_active(user_id):
+        raise HTTPException(403, 'This patient account is disabled')

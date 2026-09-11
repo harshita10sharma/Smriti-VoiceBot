@@ -221,6 +221,31 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX IF NOT EXISTS idx_voice_jobs_user ON voice_jobs(user_id);
     """,
+    # -- 4 ------------------------------------------------------------------
+    # `active`: a caregiver/backend-disabled patient must be denied even
+    # though their API-key allow-list membership is unchanged (authorization
+    # and provisioning are deliberately separate concerns -- see
+    # MemoryRepository.is_user_active). Defaults to 1 so every existing row
+    # is unaffected by this upgrade.
+    #
+    # `idempotent_requests`: optional request-level idempotency for
+    # POST /v1/conversation and POST /v1/conversation/voice (see
+    # smriti_voice/idempotency.py). A row is claimed atomically before any
+    # work happens, so two concurrent identical requests can never both
+    # execute a controlled action.
+    """
+    ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+
+    CREATE TABLE IF NOT EXISTS idempotent_requests (
+        user_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        response_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (user_id, idempotency_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_idempotent_created ON idempotent_requests(created_at);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

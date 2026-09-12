@@ -330,6 +330,13 @@ class MemorySyncFamilyMember(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     relationship: str = Field(min_length=1, max_length=40)
     phone_available: bool = False
+    # A stable reference the backend assigns (e.g. a Supabase row id),
+    # independent of this repository's own autoincrement id. Optional.
+    external_id: str | None = Field(default=None, max_length=128)
+    memory_prompt: str | None = Field(default=None, max_length=500)
+    # Passed straight through to the model as context; never inferred here
+    # from absence or from conversation. See conversation/prompts.py.
+    is_deceased: bool = False
 
 
 class MemorySyncMedicine(BaseModel):
@@ -337,12 +344,43 @@ class MemorySyncMedicine(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     dose: str | None = Field(default=None, max_length=40)
     schedule: str | None = Field(default=None, max_length=120)
+    active: bool = True
+    external_id: str | None = Field(default=None, max_length=128)
+    # Structured schedule, alongside the free-text `dose`/`schedule` above.
+    # All optional: a medicine with none of these set is matched only by
+    # `schedule`/`time_of_day` text, exactly as before these fields existed.
+    chosen_time_min: int | None = Field(default=None, ge=0, le=1439)
+    window_start_min: int | None = Field(default=None, ge=0, le=1439)
+    window_end_min: int | None = Field(default=None, ge=0, le=1439)
+    # Comma-separated ISO weekdays, Monday=1..Sunday=7, e.g. "1,2,3,4,5,6,7".
+    days_of_week: str | None = Field(default=None, max_length=20)
+
+    @field_validator('days_of_week')
+    @classmethod
+    def _valid_days_of_week(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        parts = [p.strip() for p in v.split(',') if p.strip()]
+        if not parts or any(p not in {'1', '2', '3', '4', '5', '6', '7'} for p in parts):
+            raise ValueError('days_of_week must be comma-separated ISO weekdays 1-7 '
+                             '(Monday=1, Sunday=7), e.g. "1,2,3,4,5,6,7"')
+        return v
+
+    @field_validator('window_end_min')
+    @classmethod
+    def _window_not_wrapping(cls, v, info):
+        start = info.data.get('window_start_min')
+        if v is not None and start is not None and v < start:
+            raise ValueError('window_end_min must be >= window_start_min '
+                             '(non-wrapping window only; see SECURITY.md)')
+        return v
 
 
 class MemorySyncRoutine(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     time: str | None = Field(default=None, max_length=16)
     activity: str = Field(min_length=1, max_length=120)
+    external_id: str | None = Field(default=None, max_length=128)
 
     @field_validator('time')
     @classmethod
@@ -361,6 +399,19 @@ class MemorySyncRequest(BaseModel):
     family_members: list[MemorySyncFamilyMember] = Field(default_factory=list, max_length=200)
     medicines: list[MemorySyncMedicine] = Field(default_factory=list, max_length=200)
     daily_routines: list[MemorySyncRoutine] = Field(default_factory=list, max_length=200)
+    # Patient context. All optional: omitting every one of these reproduces
+    # the exact original contract (full replace, no revisioning, no
+    # external/timezone/language update).
+    display_name: str | None = Field(default=None, max_length=120)
+    external_id: str | None = Field(default=None, max_length=128)
+    timezone: str | None = Field(default=None, max_length=64)
+    language_code: str | None = Field(default=None, max_length=16)
+    # Opt-in revisioning (see MemoryRepository.sync_caregiver_memory). Omit
+    # source_revision entirely to get the original unversioned behaviour:
+    # every call applies unconditionally, exactly as before this field
+    # existed.
+    source_revision: int | None = Field(default=None, ge=0)
+    schema_version: int = Field(default=1, ge=1)
 
     @field_validator('user_id')
     @classmethod
@@ -376,3 +427,8 @@ class MemorySyncResponse(BaseModel):
     family_members_synced: int
     medicines_synced: int
     daily_routines_synced: int
+    # 'applied' (written) | 'no_op' (identical revision+content, nothing
+    # written) -- 'stale'/'conflict' never reach this model, they are
+    # reported as HTTP 409 with an explanatory body instead.
+    status: str = 'applied'
+    source_revision: int | None = None

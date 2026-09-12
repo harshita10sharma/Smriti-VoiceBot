@@ -11,12 +11,18 @@ directly onto the existing FamilyMember/Medicine/DailyRoutine models and the
 existing provenance system (source='caregiver', verification_status
 ='verified' — the same trust level a caregiver's write already has anywhere
 else in this codebase).
+
+Revisioning (source_revision/schema_version) is opt-in: a request that omits
+source_revision gets the original, unversioned full-replace behaviour with
+no other change. A request that includes it gets stale/no-op/conflict
+detection — see MemoryRepository.sync_caregiver_memory and SyncOutcome.
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...app import Application
+from ...idempotency import payload_hash
 from ...logging import get_logger
 from ...memory.models import DailyRoutine, FamilyMember, Medicine
 from ...memory.provenance import provenance_for_write
@@ -31,6 +37,14 @@ router = APIRouter(tags=['memory'], dependencies=[Depends(require_api_key)])
 SYNC_SOURCE = 'caregiver'
 
 
+def _content_hash(payload: MemorySyncRequest) -> str:
+    """A hash of everything a revision covers, so 'same revision, different
+    content' can be detected even though the whole point of a revision
+    number is that its own value doesn't change when content does."""
+    return payload_hash(
+        payload.model_dump_json(exclude={'source_revision'}, exclude_none=False))
+
+
 @router.post('/v1/memory/sync', response_model=MemorySyncResponse)
 def memory_sync(
     payload: MemorySyncRequest,
@@ -43,11 +57,14 @@ def memory_sync(
     them, and rows from any other source (the patient's own words, an
     assistant note, seed/import data) are never touched. Auto-provisions
     the patient (idempotent, never overwrites an existing display name) if
-    this is the first contact for that ``user_id``. There is currently no
-    revision/version field on this request -- every call is a full,
-    unconditional replace; see the integration-readiness notes for why
-    that is deliberate pending a backend contract decision, not an
-    oversight."""
+    this is the first contact for that ``user_id``.
+
+    ``source_revision`` is optional. Omit it for the original, unversioned
+    behaviour (every call applies unconditionally). Provide it to get
+    stale/no-op/conflict detection: an older revision than the one already
+    applied, or the same revision with different content, returns 409;
+    the same revision with identical content is a harmless 200 no-op; a
+    newer revision applies and is recorded."""
     if payload.user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     ensure_patient_active(app, payload.user_id)
@@ -63,31 +80,48 @@ def memory_sync(
     family_members = [
         FamilyMember(user_id=payload.user_id, name=fm.name, relation=fm.relationship,
                     phone=None, is_trusted_contact=False, is_primary_contact=False,
-                    provenance=provenance)
+                    external_id=fm.external_id, memory_prompt=fm.memory_prompt,
+                    is_deceased=fm.is_deceased, provenance=provenance)
         for fm in payload.family_members
     ]
     medicines = [
         Medicine(user_id=payload.user_id, name=m.name, dosage=m.dose,
-                instructions=m.schedule, provenance=provenance)
+                instructions=m.schedule, active=m.active, external_id=m.external_id,
+                chosen_time_min=m.chosen_time_min, window_start_min=m.window_start_min,
+                window_end_min=m.window_end_min, days_of_week=m.days_of_week,
+                provenance=provenance)
         for m in payload.medicines
     ]
     routines = [
         DailyRoutine(user_id=payload.user_id, title=r.activity, routine_time=r.time,
-                    provenance=provenance)
+                    external_id=r.external_id, provenance=provenance)
         for r in payload.daily_routines
     ]
 
     try:
-        family_count, medicine_count, routine_count = app.memory.repo.sync_caregiver_memory(
+        outcome = app.memory.repo.sync_caregiver_memory(
             payload.user_id, family_members=family_members, medicines=medicines,
-            routines=routines)
+            routines=routines, display_name=payload.display_name,
+            external_id=payload.external_id, timezone=payload.timezone,
+            language_code=payload.language_code,
+            source_revision=payload.source_revision, schema_version=payload.schema_version,
+            content_hash=_content_hash(payload) if payload.source_revision is not None else None)
     except Exception as exc:
         log.error('memory_sync_failed', fields={'user_id': payload.user_id,
                                                  'error': type(exc).__name__})
         raise HTTPException(500, 'Memory synchronization failed') from exc
 
+    if outcome.status == 'stale':
+        raise HTTPException(409, f'source_revision {payload.source_revision} is older than '
+                                 f'the currently applied revision {outcome.source_revision}')
+    if outcome.status == 'conflict':
+        raise HTTPException(409, f'source_revision {payload.source_revision} was already '
+                                 'applied with different content (currently applied revision '
+                                 f'{outcome.source_revision}) -- use a new, higher revision')
+
     return MemorySyncResponse(
         success=True, user_id=payload.user_id,
-        family_members_synced=family_count,
-        medicines_synced=medicine_count,
-        daily_routines_synced=routine_count)
+        family_members_synced=outcome.family_members_synced,
+        medicines_synced=outcome.medicines_synced,
+        daily_routines_synced=outcome.daily_routines_synced,
+        status=outcome.status, source_revision=outcome.source_revision)

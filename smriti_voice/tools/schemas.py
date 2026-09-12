@@ -41,6 +41,9 @@ class AppointmentQuery(DateQuery):
 class MedicationQuery(StrictModel):
     time_of_day: str | None = Field(default=None, max_length=20,
                                     description="'morning', 'afternoon', 'evening' or 'night'.")
+    when: str | None = Field(default=None, max_length=40,
+                             description="'today', 'tomorrow' or an ISO date (YYYY-MM-DD). "
+                                         "Omit for no day filtering.")
 
 
 class WeatherQuery(StrictModel):

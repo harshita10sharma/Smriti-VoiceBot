@@ -246,6 +246,65 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX IF NOT EXISTS idx_idempotent_created ON idempotent_requests(created_at);
     """,
+    # -- 5 ------------------------------------------------------------------
+    # Backend-integration fields, all additive and backward compatible:
+    #
+    # `external_id` (users/family_members/medicines/daily_routines): a stable
+    # reference the backend's own database assigns (e.g. a Supabase UUID or
+    # row id), independent of this database's own autoincrement `id`. Never
+    # required -- existing rows and callers that never set it are unaffected.
+    #
+    # `timezone` (users): IANA name, used for day-of-week medicine schedule
+    # matching (see MemoryService).
+    #
+    # `memory_prompt`/`is_deceased` (family_members): passed straight through
+    # to the model as context, never inferred.
+    #
+    # `chosen_time_min`/`window_start_min`/`window_end_min`/`days_of_week`
+    # (medicines): structured schedule data (minutes-from-midnight, ISO
+    # weekdays "1".."7", Monday=1) alongside the existing free-text
+    # `schedule_time`/`time_of_day`, which remain the fallback when a medicine
+    # has no structured schedule.
+    #
+    # `memory_sync_state`: one row per patient recording the last-applied
+    # POST /v1/memory/sync revision and a content hash, so a repeated,
+    # stale, or conflicting revision can be detected (see
+    # MemoryRepository.sync_caregiver_memory). A patient with no row here
+    # has never been synced with a revision at all -- unversioned callers
+    # (source_revision omitted) never create or check this row, so existing
+    # integrations are completely unaffected.
+    """
+    ALTER TABLE users ADD COLUMN external_id TEXT;
+    ALTER TABLE users ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata';
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_external_id ON users(external_id)
+        WHERE external_id IS NOT NULL;
+
+    ALTER TABLE family_members ADD COLUMN external_id TEXT;
+    ALTER TABLE family_members ADD COLUMN memory_prompt TEXT;
+    ALTER TABLE family_members ADD COLUMN is_deceased INTEGER NOT NULL DEFAULT 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_family_external_id
+        ON family_members(user_id, external_id) WHERE external_id IS NOT NULL;
+
+    ALTER TABLE medicines ADD COLUMN external_id TEXT;
+    ALTER TABLE medicines ADD COLUMN chosen_time_min INTEGER;
+    ALTER TABLE medicines ADD COLUMN window_start_min INTEGER;
+    ALTER TABLE medicines ADD COLUMN window_end_min INTEGER;
+    ALTER TABLE medicines ADD COLUMN days_of_week TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_medicines_external_id
+        ON medicines(user_id, external_id) WHERE external_id IS NOT NULL;
+
+    ALTER TABLE daily_routines ADD COLUMN external_id TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_external_id
+        ON daily_routines(user_id, external_id) WHERE external_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS memory_sync_state (
+        user_id TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+        source_revision INTEGER NOT NULL,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        content_hash TEXT NOT NULL,
+        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

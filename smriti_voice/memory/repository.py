@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
@@ -56,6 +57,29 @@ def _prov_values(provenance: Provenance, default_source: str = 'caregiver') -> t
 CAREGIVER_SYNC_MARKER = 'memory_sync'
 
 
+@dataclass(frozen=True)
+class SyncOutcome:
+    """Result of MemoryRepository.sync_caregiver_memory.
+
+    status is one of:
+      'applied'  -- the snapshot was written (unversioned calls are always
+                    'applied'; this is the entire old return contract).
+      'no_op'    -- source_revision matched the already-applied one with an
+                    identical content_hash; nothing was written.
+      'stale'    -- source_revision was older than the already-applied one;
+                    nothing was written. source_revision reports the
+                    currently-applied one instead of the caller's.
+      'conflict' -- source_revision matched the already-applied one but
+                    content_hash differed; nothing was written.
+                    source_revision reports the currently-applied one.
+    """
+    status: str
+    family_members_synced: int
+    medicines_synced: int
+    daily_routines_synced: int
+    source_revision: int | None
+
+
 class MemoryRepository:
     def __init__(self, database: Database) -> None:
         self.db = database
@@ -69,8 +93,8 @@ class MemoryRepository:
         with self.db.connect() as connection:
             connection.execute(
                 """INSERT INTO users (user_id, display_name, preferred_language, location,
-                                      latitude, longitude, active)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                                      latitude, longitude, active, external_id, timezone)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(user_id) DO UPDATE SET
                        display_name=excluded.display_name,
                        preferred_language=excluded.preferred_language,
@@ -78,9 +102,12 @@ class MemoryRepository:
                        latitude=excluded.latitude,
                        longitude=excluded.longitude,
                        active=excluded.active,
+                       external_id=excluded.external_id,
+                       timezone=excluded.timezone,
                        updated_at=datetime('now')""",
                 (user.user_id, user.display_name, user.preferred_language, user.location,
-                 user.latitude, user.longitude, int(user.active)))
+                 user.latitude, user.longitude, int(user.active), user.external_id,
+                 user.timezone))
         return user
 
     def get_user(self, user_id: str) -> User | None:
@@ -90,8 +117,17 @@ class MemoryRepository:
             return None
         fields = {k: row[k] for k in ('user_id', 'display_name', 'preferred_language',
                                       'location', 'latitude', 'longitude')}
-        fields['active'] = bool(row['active']) if 'active' in row.keys() else True
+        keys = row.keys()
+        fields['active'] = bool(row['active']) if 'active' in keys else True
+        fields['external_id'] = row['external_id'] if 'external_id' in keys else None
+        fields['timezone'] = row['timezone'] if 'timezone' in keys and row['timezone'] else 'Asia/Kolkata'
         return User(**fields)
+
+    def get_user_by_external_id(self, external_id: str) -> User | None:
+        with self.db.connect() as connection:
+            row = connection.execute('SELECT user_id FROM users WHERE external_id = ?',
+                                     (external_id,)).fetchone()
+        return self.get_user(row['user_id']) if row else None
 
     def is_user_active(self, user_id: str) -> bool:
         """True if the patient may be served: either not yet provisioned at
@@ -124,11 +160,13 @@ class MemoryRepository:
             cursor = connection.execute(
                 """INSERT INTO family_members (user_id, name, relation, phone, is_trusted_contact,
                                                is_primary_contact, lives_in, notes, photo_path,
+                                               external_id, memory_prompt, is_deceased,
                                                source, created_by, confidence, verification_status)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (member.user_id, member.name, member.relation, member.phone,
                  int(member.is_trusted_contact), int(member.is_primary_contact),
-                 member.lives_in, member.notes, member.photo_path, *_prov_values(member.provenance)))
+                 member.lives_in, member.notes, member.photo_path, member.external_id,
+                 member.memory_prompt, int(member.is_deceased), *_prov_values(member.provenance)))
         return member.model_copy(update={'id': cursor.lastrowid})
 
     def list_family(self, user_id: str) -> list[FamilyMember]:
@@ -163,11 +201,16 @@ class MemoryRepository:
 
     @staticmethod
     def _to_family(row: sqlite3.Row) -> FamilyMember:
+        keys = row.keys()
         return FamilyMember(
             id=row['id'], user_id=row['user_id'], name=row['name'], relation=row['relation'],
             phone=row['phone'], is_trusted_contact=bool(row['is_trusted_contact']),
             is_primary_contact=bool(row['is_primary_contact']), lives_in=row['lives_in'],
-            notes=row['notes'], photo_path=row['photo_path'], provenance=_provenance(row))
+            notes=row['notes'], photo_path=row['photo_path'],
+            external_id=row['external_id'] if 'external_id' in keys else None,
+            memory_prompt=row['memory_prompt'] if 'memory_prompt' in keys else None,
+            is_deceased=bool(row['is_deceased']) if 'is_deceased' in keys else False,
+            provenance=_provenance(row))
 
     # ------------------------------------------------------------------ #
     # Meals
@@ -208,12 +251,16 @@ class MemoryRepository:
         with self.db.connect() as connection:
             cursor = connection.execute(
                 """INSERT INTO medicines (user_id, name, dosage, schedule_time, time_of_day,
-                                          instructions, active, prescribed_by,
+                                          instructions, active, prescribed_by, external_id,
+                                          chosen_time_min, window_start_min, window_end_min,
+                                          days_of_week,
                                           source, created_by, confidence, verification_status)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (medicine.user_id, medicine.name, medicine.dosage, medicine.schedule_time,
                  medicine.time_of_day, medicine.instructions, int(medicine.active),
-                 medicine.prescribed_by, *_prov_values(medicine.provenance)))
+                 medicine.prescribed_by, medicine.external_id, medicine.chosen_time_min,
+                 medicine.window_start_min, medicine.window_end_min, medicine.days_of_week,
+                 *_prov_values(medicine.provenance)))
         return medicine.model_copy(update={'id': cursor.lastrowid})
 
     def list_medicines(self, user_id: str, *, time_of_day: str | None = None,
@@ -228,11 +275,22 @@ class MemoryRepository:
         query = f"SELECT * FROM medicines WHERE {' AND '.join(clauses)} ORDER BY schedule_time, name"
         with self.db.connect() as connection:
             rows = connection.execute(query, params).fetchall()
-        return [Medicine(id=r['id'], user_id=r['user_id'], name=r['name'], dosage=r['dosage'],
-                         schedule_time=r['schedule_time'], time_of_day=r['time_of_day'],
-                         instructions=r['instructions'], active=bool(r['active']),
-                         prescribed_by=r['prescribed_by'], provenance=_provenance(r))
-                for r in rows]
+        return [self._to_medicine(r) for r in rows]
+
+    @staticmethod
+    def _to_medicine(row: sqlite3.Row) -> Medicine:
+        keys = row.keys()
+        return Medicine(
+            id=row['id'], user_id=row['user_id'], name=row['name'], dosage=row['dosage'],
+            schedule_time=row['schedule_time'], time_of_day=row['time_of_day'],
+            instructions=row['instructions'], active=bool(row['active']),
+            prescribed_by=row['prescribed_by'],
+            external_id=row['external_id'] if 'external_id' in keys else None,
+            chosen_time_min=row['chosen_time_min'] if 'chosen_time_min' in keys else None,
+            window_start_min=row['window_start_min'] if 'window_start_min' in keys else None,
+            window_end_min=row['window_end_min'] if 'window_end_min' in keys else None,
+            days_of_week=row['days_of_week'] if 'days_of_week' in keys else None,
+            provenance=_provenance(row))
 
     # ------------------------------------------------------------------ #
     # Appointments, routine, visitors, reminders
@@ -277,10 +335,11 @@ class MemoryRepository:
         with self.db.connect() as connection:
             cursor = connection.execute(
                 """INSERT INTO daily_routines (user_id, title, routine_time, day_of_week, notes,
+                                               external_id,
                                                source, created_by, confidence, verification_status)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (routine.user_id, routine.title, routine.routine_time, routine.day_of_week,
-                 routine.notes, *_prov_values(routine.provenance)))
+                 routine.notes, routine.external_id, *_prov_values(routine.provenance)))
         return routine.model_copy(update={'id': cursor.lastrowid})
 
     def list_routine(self, user_id: str, day_of_week: str | None = None) -> list[DailyRoutine]:
@@ -294,7 +353,9 @@ class MemoryRepository:
             rows = connection.execute(query, params).fetchall()
         return [DailyRoutine(id=r['id'], user_id=r['user_id'], title=r['title'],
                              routine_time=r['routine_time'], day_of_week=r['day_of_week'],
-                             notes=r['notes'], provenance=_provenance(r)) for r in rows]
+                             notes=r['notes'],
+                             external_id=r['external_id'] if 'external_id' in r.keys() else None,
+                             provenance=_provenance(r)) for r in rows]
 
     def add_visitor(self, visitor: Visitor) -> Visitor:
         with self.db.connect() as connection:
@@ -426,8 +487,11 @@ class MemoryRepository:
     # Caregiver memory synchronisation (POST /v1/memory/sync)
     # ------------------------------------------------------------------ #
     def sync_caregiver_memory(self, user_id: str, *, family_members: list[FamilyMember],
-                              medicines: list[Medicine],
-                              routines: list[DailyRoutine]) -> tuple[int, int, int]:
+                              medicines: list[Medicine], routines: list[DailyRoutine],
+                              display_name: str | None = None, external_id: str | None = None,
+                              timezone: str | None = None, language_code: str | None = None,
+                              source_revision: int | None = None, schema_version: int = 1,
+                              content_hash: str | None = None) -> 'SyncOutcome':
         """Atomically replace this user's caregiver-synced family members,
         medicines and daily routines in one transaction.
 
@@ -439,20 +503,70 @@ class MemoryRepository:
         connection inside one ``with`` block: if any statement raises,
         ``Database.connect()`` rolls back the whole thing, so a patient is
         never left partially synchronised.
+
+        ``source_revision`` is optional and opt-in: a caller that omits it
+        gets exactly the original, unversioned full-replace behaviour (every
+        call applies unconditionally) -- nothing here changes for an
+        existing integration that has not adopted revisioning.  A caller
+        that provides it also gets ``content_hash`` compared against the
+        last-applied one for this patient (see ``smriti_voice.idempotency
+        .payload_hash``, reused for exactly this comparison): an older
+        revision is rejected as stale, an equal revision with an equal hash
+        is a harmless no-op, an equal revision with a different hash is a
+        conflict, and a newer revision is applied and recorded.
         """
         with self.db.connect() as connection:
+            if source_revision is not None:
+                row = connection.execute(
+                    """SELECT source_revision, content_hash FROM memory_sync_state
+                       WHERE user_id = ?""", (user_id,)).fetchone()
+                if row is not None:
+                    if source_revision < row['source_revision']:
+                        return SyncOutcome(status='stale', family_members_synced=0,
+                                          medicines_synced=0, daily_routines_synced=0,
+                                          source_revision=row['source_revision'])
+                    if source_revision == row['source_revision']:
+                        if content_hash == row['content_hash']:
+                            return SyncOutcome(status='no_op',
+                                              family_members_synced=len(family_members),
+                                              medicines_synced=len(medicines),
+                                              daily_routines_synced=len(routines),
+                                              source_revision=source_revision)
+                        return SyncOutcome(status='conflict', family_members_synced=0,
+                                          medicines_synced=0, daily_routines_synced=0,
+                                          source_revision=row['source_revision'])
+
             # A caregiver may sync a patient's data before that patient has
-            # ever opened a conversation. Provision the bare `users` row in
+            # ever opened a conversation. Provision/update the `users` row in
             # the same transaction rather than requiring a separate call --
             # without this, the first sync for a brand-new patient hits a
             # foreign-key violation on every insert below. This is
             # provisioning only, never authorization: the route already
             # checked the caller's API-key allow-list before reaching here.
+            # COALESCE keeps any existing value when the caller omits a
+            # field, so a sync that doesn't mention e.g. timezone never
+            # blanks out one set some other way.
+            # `excluded.x` in an ON CONFLICT clause always reflects the value
+            # just inserted -- including a NOT-NULL fallback default applied
+            # for a brand-new row -- so it cannot be used to tell "the caller
+            # omitted this field" apart from "the caller sent the default"
+            # on an UPDATE. The raw (possibly-None) values are bound again,
+            # separately, for the UPDATE branch's own COALESCE-with-existing,
+            # so omitting a field on a later sync never overwrites a value
+            # set some other way with a placeholder default.
             connection.execute(
-                """INSERT INTO users (user_id, display_name)
-                   VALUES (?, ?)
-                   ON CONFLICT(user_id) DO NOTHING""",
-                (user_id, user_id))
+                """INSERT INTO users (user_id, display_name, external_id, timezone,
+                                      preferred_language)
+                   VALUES (?, ?, ?, COALESCE(?, 'Asia/Kolkata'), COALESCE(?, 'eng'))
+                   ON CONFLICT(user_id) DO UPDATE SET
+                       display_name = COALESCE(?, display_name),
+                       external_id = COALESCE(?, external_id),
+                       timezone = COALESCE(?, timezone),
+                       preferred_language = COALESCE(?, preferred_language),
+                       updated_at = datetime('now')""",
+                (user_id, display_name or user_id, external_id, timezone, language_code,
+                 display_name, external_id, timezone, language_code))
+
             connection.execute(
                 """DELETE FROM family_members
                    WHERE user_id = ? AND source = 'caregiver' AND created_by = ?""",
@@ -462,12 +576,14 @@ class MemoryRepository:
                     """INSERT INTO family_members (user_id, name, relation, phone,
                                                    is_trusted_contact, is_primary_contact,
                                                    lives_in, notes, photo_path,
+                                                   external_id, memory_prompt, is_deceased,
                                                    source, created_by, confidence,
                                                    verification_status)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (member.user_id, member.name, member.relation, member.phone,
                      int(member.is_trusted_contact), int(member.is_primary_contact),
-                     member.lives_in, member.notes, member.photo_path,
+                     member.lives_in, member.notes, member.photo_path, member.external_id,
+                     member.memory_prompt, int(member.is_deceased),
                      *_prov_values(member.provenance)))
 
             connection.execute(
@@ -477,12 +593,16 @@ class MemoryRepository:
             for medicine in medicines:
                 connection.execute(
                     """INSERT INTO medicines (user_id, name, dosage, schedule_time, time_of_day,
-                                              instructions, active, prescribed_by,
+                                              instructions, active, prescribed_by, external_id,
+                                              chosen_time_min, window_start_min, window_end_min,
+                                              days_of_week,
                                               source, created_by, confidence, verification_status)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (medicine.user_id, medicine.name, medicine.dosage, medicine.schedule_time,
                      medicine.time_of_day, medicine.instructions, int(medicine.active),
-                     medicine.prescribed_by, *_prov_values(medicine.provenance)))
+                     medicine.prescribed_by, medicine.external_id, medicine.chosen_time_min,
+                     medicine.window_start_min, medicine.window_end_min, medicine.days_of_week,
+                     *_prov_values(medicine.provenance)))
 
             connection.execute(
                 """DELETE FROM daily_routines
@@ -491,12 +611,28 @@ class MemoryRepository:
             for routine in routines:
                 connection.execute(
                     """INSERT INTO daily_routines (user_id, title, routine_time, day_of_week,
-                                                   notes, source, created_by, confidence,
+                                                   notes, external_id,
+                                                   source, created_by, confidence,
                                                    verification_status)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     (routine.user_id, routine.title, routine.routine_time, routine.day_of_week,
-                     routine.notes, *_prov_values(routine.provenance)))
-        return len(family_members), len(medicines), len(routines)
+                     routine.notes, routine.external_id, *_prov_values(routine.provenance)))
+
+            if source_revision is not None:
+                connection.execute(
+                    """INSERT INTO memory_sync_state (user_id, source_revision, schema_version,
+                                                       content_hash, applied_at)
+                       VALUES (?, ?, ?, ?, datetime('now'))
+                       ON CONFLICT(user_id) DO UPDATE SET
+                           source_revision = excluded.source_revision,
+                           schema_version = excluded.schema_version,
+                           content_hash = excluded.content_hash,
+                           applied_at = excluded.applied_at""",
+                    (user_id, source_revision, schema_version, content_hash or ''))
+
+        return SyncOutcome(status='applied', family_members_synced=len(family_members),
+                          medicines_synced=len(medicines), daily_routines_synced=len(routines),
+                          source_revision=source_revision)
 
     # ------------------------------------------------------------------ #
     def record_telemetry(self, *, event_id: str, event_type: str, payload: dict,

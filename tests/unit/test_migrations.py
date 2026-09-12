@@ -13,8 +13,8 @@ import sqlite3
 from smriti_voice.database.migrations import MIGRATIONS, SCHEMA_VERSION, migrate
 
 
-def test_schema_version_is_four_after_this_change():
-    assert SCHEMA_VERSION == len(MIGRATIONS) == 4
+def test_schema_version_is_five_after_this_change():
+    assert SCHEMA_VERSION == len(MIGRATIONS) == 5
 
 
 def test_migrating_a_fresh_database_reaches_current_version():
@@ -70,3 +70,52 @@ def test_active_column_and_idempotent_requests_table_exist(app):
         tables = {row['name'] for row in
                   connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert 'idempotent_requests' in tables
+
+
+def test_upgrading_an_existing_version_4_database_in_place_preserves_data():
+    """The exact upgrade path a device already running the prior revision
+    (schema version 4, before external_id/structured medicine fields/
+    memory_sync_state existed) goes through."""
+    connection = sqlite3.connect(':memory:')
+    connection.row_factory = sqlite3.Row
+    for index, script in enumerate(MIGRATIONS[:4], start=1):
+        connection.executescript(script)
+        connection.execute(f'PRAGMA user_version = {index}')
+
+    connection.execute(
+        "INSERT INTO users (user_id, display_name) VALUES ('pre-existing-user', 'Someone')")
+    connection.execute(
+        """INSERT INTO medicines (user_id, name, dosage, active)
+           VALUES ('pre-existing-user', 'Metformin', '500mg', 1)""")
+    connection.commit()
+
+    version = migrate(connection)
+    assert version == SCHEMA_VERSION
+
+    user = connection.execute(
+        "SELECT * FROM users WHERE user_id = 'pre-existing-user'").fetchone()
+    assert user is not None
+    assert user['external_id'] is None  # new column, no value invented for old data
+    assert user['timezone'] == 'Asia/Kolkata'  # NOT NULL default applied, not an error
+
+    medicine = connection.execute(
+        "SELECT * FROM medicines WHERE user_id = 'pre-existing-user'").fetchone()
+    assert medicine['name'] == 'Metformin'  # untouched
+    assert medicine['chosen_time_min'] is None  # new column, nothing invented
+
+    count = connection.execute('SELECT COUNT(*) FROM memory_sync_state').fetchone()[0]
+    assert count == 0  # new table, empty, not populated for pre-existing data
+
+
+def test_external_id_uniqueness_is_enforced_per_user(app):
+    """A duplicate external_id for the same patient is rejected at the
+    database level (defense in depth beyond the repository's own logic)."""
+    import pytest
+    with app.memory.repo.db.connect() as connection:
+        connection.execute(
+            """INSERT INTO family_members (user_id, name, relation, external_id)
+               VALUES ('demo-user', 'A', 'son', 'ext-1')""")
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """INSERT INTO family_members (user_id, name, relation, external_id)
+                   VALUES ('demo-user', 'B', 'daughter', 'ext-1')""")

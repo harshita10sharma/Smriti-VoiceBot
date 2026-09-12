@@ -129,6 +129,83 @@ turn 2  "Yes"                  → action=CALL_PRIMARY_CONTACT, action_accepted=
 
 Anything other than a clear yes leaves the action pending. Never auto-confirm on a timeout.
 
+## Voice job lifecycle
+
+States: `queued` → `processing` → one of `completed` / `failed` / `cancelled`. There is no
+separate `expired` job state — a job that completed keeps reporting `completed` (that is
+historically true: synthesis really did finish), but `GET /v1/voice/jobs/{job_id}` also
+returns `audio_expired: true` once the generated file has aged out of the ~15-minute
+retention window, so a client can tell "never existed" apart from "existed, now gone"
+without a failed audio fetch.
+
+```
+POST /v1/conversation/voice                → job_id, job_status=QUEUED
+GET  /v1/voice/jobs/{job_id}                → poll until status is terminal
+POST /v1/voice/jobs/{job_id}/cancel         → cancel a queued/processing job
+GET  /v1/audio/{audio_id}                   → fetch once, promptly
+```
+
+- **Queue overload**: if the single TTS worker's queue is full, the job is created but
+  immediately marked `failed` with `error_code=QUEUE_OVERLOADED` — poll once and back off
+  before retrying, rather than assuming a transient queued state.
+- **Processing deadline**: a job stuck `processing` for longer than
+  `SMRITI_VOICE_JOB_PROCESSING_DEADLINE_S` (default 180s) is reported (and durably marked)
+  `failed` with `error_code=PROCESSING_TIMEOUT` the next time anything reads it — never left
+  polling forever.
+- **Cancellation**: `POST /v1/voice/jobs/{job_id}/cancel` cancels a still-`queued` or
+  `-processing` job; cancelling an already-terminal job is not an error, it just returns
+  `cancelled: false` with that job's real current status. If the worker happens to finish
+  synthesis at almost the same moment, whichever write reaches the database first wins —
+  a job can never report `completed` after being told `cancelled`, and cancelling something
+  already completed never undoes it.
+- **Restart recovery**: a job left `queued`/`processing` when the process restarts is marked
+  `failed` with `error_code=INTERRUPTED_BY_RESTART` at the next startup — never silently
+  retried, never left stuck.
+- **Ownership**: a job or audio id that doesn't belong to your credential's patient(s) always
+  returns **404**, identical to a nonexistent id — you cannot use this to probe whether
+  another patient's job exists.
+- **Idempotency**: send `Idempotency-Key` on `POST /v1/conversation/voice` if your client
+  might retry after a timeout. The same key with the exact same audio bytes +
+  user_id/session_id/language/speak returns the original result without re-running
+  ASR/conversation/TTS-job-creation; the same key with different content returns **409**.
+  Concurrent duplicate submissions with the same key never create two jobs.
+
+## Audio format
+
+What `POST /v1/conversation/voice` and `POST /v1/command` actually enforce today, exactly —
+not what might be ideal:
+
+| Property | Enforcement |
+|---|---|
+| Container | Must be RIFF/WAVE (`RIFF....WAVE` header) |
+| `Content-Type` | One of `audio/wav`, `audio/x-wav`, `audio/wave`, `application/octet-stream` |
+| Minimum size | 44 bytes, and a `data` chunk must be present |
+| Maximum size | `SMRITI_MAX_UPLOAD_BYTES`, default 10 MiB |
+| Maximum duration | `SMRITI_MAX_WAV_DURATION_S`, default 60s — **best-effort**: computed from the parsed header where possible, and never rejects a file this check can't parse (that file is left to the container checks above and ultimately the ASR provider) |
+| Sample rate / channels / bit depth | **Not enforced by this API.** Whatever the ASR provider accepts or rejects on its own. Do not assume a specific rate is required; a real device recording at 16 kHz mono 16-bit PCM is the safest choice but is a provider expectation, not an API-level requirement today |
+
+Rejections: empty payload → **400**; not a valid/parseable WAV, or wrong content-type →
+**415**; over the byte or duration limit → **413**.
+
+## Language capability matrix (verified against this repository's actual code, not assumed)
+
+| Product code | Internal code | ASR | LLM conversation | Deterministic fallback | TTS | Real validation evidence |
+|---|---|---|---|---|---|---|
+| `hi` | `hin` | Sarvam (online) + local (`validated_local` pack status) | yes | yes (eng/hin/asm/ben only) | Sarvam | none recorded in `config/language_validation.json` |
+| `as` | `asm` | Sarvam (online); local downgraded to `benchmark_only` (placeholder HF model, no real weights) | yes | yes | **no configured provider** | none recorded |
+| `mni` | `mni` | Sarvam (online) + local (`validated_local`) | **no** — not in the configured LLM-language set | **no** — no deterministic template for this language | **no configured provider** | none recorded |
+| `kha` | `kha` | Local NE-ASR only, `benchmark_only` (no cloud ASR at all) | **no** | **no** | **no configured provider** | none recorded |
+| `lus` | `lus` | Local NE-ASR only, `benchmark_only` | **no** | **no** | **no configured provider** | none recorded |
+| `en` | `eng` | Sarvam (online); local `benchmark_only` (uses generic Whisper, not IndicConformer) | yes | yes | Sarvam | none recorded |
+
+**Read `GET /v1/languages` live, always** — this table is a snapshot for planning purposes,
+not something to hard-code. `config/language_validation.json`'s validated-language list is
+currently empty, so every language reports at most `BENCHMARK_ONLY`/`NOT_YET_TESTED`, never
+`SUPPORTED`, regardless of what this table says an adapter *could* do — adapter existence is
+never treated as proof it works. If your product plan depends on Meiteilon, Khasi or Mizo
+having a general conversational assistant (not just command navigation), that is a real,
+currently-unmet requirement in this codebase, not a configuration flag to flip.
+
 ## Backend developer notes
 
 - Set `SMRITI_API_KEY`. Without it, protected endpoints return **503** by design.

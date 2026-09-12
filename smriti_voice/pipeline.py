@@ -14,8 +14,10 @@ router would misread as silence.
 """
 from __future__ import annotations
 
+import io
 import time
 import uuid
+import wave
 from pathlib import Path
 
 from .app import Application
@@ -28,8 +30,19 @@ log = get_logger('pipeline')
 MIN_WAV_BYTES = 44
 
 
-def validate_wav_bytes(raw: bytes, *, max_bytes: int) -> None:
-    """Reject anything that is not a plausible WAV before it reaches a decoder."""
+def validate_wav_bytes(raw: bytes, *, max_bytes: int, max_duration_s: float | None = None) -> None:
+    """Reject anything that is not a plausible WAV before it reaches a decoder.
+
+    Container/size checks are unconditional. The duration check is
+    deliberately best-effort and fail-open: it uses the stdlib ``wave``
+    module to compute the real duration from the parsed header, and only
+    ever rejects on a *positively confirmed* excessive duration. A file
+    that ``wave`` cannot parse (non-standard chunk ordering, a codec the
+    lightweight header check above still accepted) is left to the existing
+    RIFF/WAVE/data checks and, ultimately, the ASR provider -- this must
+    never become a new source of false rejections for audio that would
+    otherwise have worked.
+    """
     if not raw:
         raise AudioError('Audio payload is empty')
     if len(raw) > max_bytes:
@@ -40,6 +53,18 @@ def validate_wav_bytes(raw: bytes, *, max_bytes: int) -> None:
         raise AudioError('WAV file is truncated or malformed')
     if b'data' not in raw[12:]:
         raise AudioError('WAV file is missing audio data')
+
+    if max_duration_s is not None:
+        try:
+            with wave.open(io.BytesIO(raw), 'rb') as handle:
+                rate = handle.getframerate()
+                frames = handle.getnframes()
+                duration_s = frames / rate if rate else 0.0
+        except Exception:
+            return  # fail-open: an unparseable-by-wave file is not rejected here
+        if duration_s > max_duration_s:
+            raise AudioError(f'Audio duration ({duration_s:.1f}s) exceeds the '
+                             f'{max_duration_s:.0f}s limit')
 
 
 class VoicePipeline:

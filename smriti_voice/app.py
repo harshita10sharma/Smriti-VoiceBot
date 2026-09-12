@@ -69,7 +69,8 @@ class Application:
             sessions=SessionStore(repository, max_turns=config.max_history_turns,
                                   idle_timeout_minutes=config.max_session_idle_minutes))
         # Shares the same database/migration as MemoryRepository above.
-        voice_jobs = VoiceJobRepository(repository.db)
+        voice_jobs = VoiceJobRepository(repository.db,
+                                        processing_deadline_s=config.voice_job_processing_deadline_s)
         # Any job still queued/processing at this exact moment belongs to a
         # previous process that crashed or was restarted -- nothing has been
         # submitted to this process's worker yet, so it cannot be a job

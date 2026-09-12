@@ -34,7 +34,8 @@ def _get_engine() -> VoiceEngine:
 async def command(audio_wav: UploadFile = File(...), language: str = Form(...),
                   request_id: str | None = Form(default=None),
                   app: Application = Depends(application)) -> dict:
-    raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes)
+    raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes,
+                                max_duration_s=app.config.max_wav_duration_s)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as handle:
         handle.write(raw)

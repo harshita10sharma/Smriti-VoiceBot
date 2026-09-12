@@ -311,12 +311,24 @@ class VoiceResponse(ConversationResponse):
 class VoiceJobStatusResponse(BaseModel):
     """GET /v1/voice/jobs/{job_id}."""
     job_id: str
-    status: str  # queued | processing | completed | failed
+    status: str  # queued | processing | completed | failed | cancelled
     language: str
     audio_id: str | None = None
     audio_url: str | None = None
     tts_provider: str | None = None
     error_code: str | None = None
+    # True only when status == 'completed' but the audio file has since
+    # aged out of retention -- lets a client distinguish "never generated"
+    # from "was generated, now gone" without a separate failed GET
+    # /v1/audio/{id} round trip. See tts/router.py's AudioStore retention.
+    audio_expired: bool = False
+
+
+class VoiceJobCancelResponse(BaseModel):
+    """POST /v1/voice/jobs/{job_id}/cancel."""
+    job_id: str
+    status: str
+    cancelled: bool
 
 
 # --------------------------------------------------------------------------- #

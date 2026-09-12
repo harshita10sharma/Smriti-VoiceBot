@@ -165,7 +165,9 @@ class AppConfig:
     api_key_env: str
     rate_limit_per_minute: int
     max_upload_bytes: int
+    max_wav_duration_s: float
     voice_job_queue_max: int
+    voice_job_processing_deadline_s: int
     idempotency_ttl_hours: int
     version: str
 
@@ -215,7 +217,17 @@ class AppConfig:
             api_key_env=s.api_key_env,
             rate_limit_per_minute=_env_int('SMRITI_RATE_LIMIT_PER_MINUTE', 60),
             max_upload_bytes=s.max_upload_bytes,
+            # Generous on purpose: an elderly speaker may pause mid-sentence.
+            # This exists to catch a genuinely pathological upload (a
+            # multi-minute recording), not to police normal speech pacing --
+            # see validate_wav_bytes's fail-open duration check.
+            max_wav_duration_s=_env_float('SMRITI_MAX_WAV_DURATION_S', 60.0),
             voice_job_queue_max=_env_int('SMRITI_VOICE_JOB_QUEUE_MAX', 200),
+            # Indic Parler-TTS can genuinely take over a minute on CPU
+            # (module docstring, voice_jobs.py); 3 minutes leaves real
+            # headroom while still eventually failing a job whose
+            # synthesis call never returns at all.
+            voice_job_processing_deadline_s=_env_int('SMRITI_VOICE_JOB_PROCESSING_DEADLINE_S', 180),
             idempotency_ttl_hours=_env_int('SMRITI_IDEMPOTENCY_TTL_HOURS', 24),
             version=__version__,
         )

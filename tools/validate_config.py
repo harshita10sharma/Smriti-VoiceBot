@@ -103,6 +103,37 @@ def main() -> int:
         check('SMRITI_INDIC_PARLER_ENABLED is set', False,
               'asm/brx/mni/npi will have no voice output until this is enabled', hard=False)
 
+    print('\nProcess/worker model')
+    # SessionStore and RateLimiter (api/dependencies.py) are both process-wide
+    # in-memory singletons; Indic Parler-TTS also loads a ~3.7 GB model
+    # instance per process. This deployment is safe ONLY with exactly one
+    # worker process (Dockerfile hardcodes `--workers 1`). There is no
+    # reliable way for a running process to detect its sibling workers, so
+    # this is a best-effort check of the common env-var conventions
+    # (WEB_CONCURRENCY, UVICORN_WORKERS) an operator might set if they
+    # override the Dockerfile's launch command -- it cannot catch every way
+    # of accidentally starting more than one worker.
+    worker_hints = {name: os.getenv(name, '').strip()
+                    for name in ('WEB_CONCURRENCY', 'UVICORN_WORKERS')}
+    set_hints = {name: value for name, value in worker_hints.items() if value}
+    if not set_hints:
+        check('no multi-worker env var detected', True,
+              'WEB_CONCURRENCY/UVICORN_WORKERS unset — assuming the Dockerfile default '
+              'of exactly one worker; this cannot be fully verified from inside the '
+              'process, see SECURITY.md')
+    else:
+        for name, value in set_hints.items():
+            try:
+                count = int(value)
+            except ValueError:
+                check(f'{name} is a valid integer', False, repr(value))
+                continue
+            check(f'{name}={count} is safe for this deployment', count <= 1,
+                  'SessionStore, RateLimiter and (if enabled) the Indic Parler-TTS model '
+                  'instance are process-local; more than one worker silently breaks '
+                  'session/rate-limit isolation and, if Indic Parler-TTS is enabled, '
+                  'loads a second ~3.7 GB model copy')
+
     print('\nAPI authentication')
     raw_key_map = os.getenv('SMRITI_API_KEYS', '').strip()
     key_set = bool(os.getenv(app.config.api_key_env))

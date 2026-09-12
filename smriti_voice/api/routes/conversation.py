@@ -32,6 +32,13 @@ def conversation(payload: ConversationRequest,
                  rid: str = Depends(request_id),
                  authorized: frozenset = Depends(authorized_user_ids),
                  idem_key: str | None = Depends(idempotency_key)) -> ConversationResponse:
+    """One text turn: safety screen, deterministic command router, LLM +
+    tools, deterministic fallback -- in that order (see
+    conversation/manager.py). Requires ``x-api-key``; ``user_id`` must be
+    authorized for that key and (if provisioned) not disabled, or this
+    returns 403. An optional ``Idempotency-Key`` header makes a retried
+    identical request return the original result instead of executing
+    again; the same key with a different body returns 409."""
     if payload.user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     ensure_patient_active(app, payload.user_id)

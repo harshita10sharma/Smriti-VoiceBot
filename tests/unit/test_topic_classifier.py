@@ -51,6 +51,26 @@ def test_word_boundary_matching_does_not_false_positive_on_substrings():
     assert classify_topic('Give me a reason to smile today.') == 'general'
 
 
+def test_explicit_false_positive_review_word_list():
+    """Independent false-positive review (integration-hardening phase 2):
+    the exact word list called out as a risk -- your, time, when, today,
+    who, help, tell, give, show -- embedded in ordinary general questions,
+    confirmed not to trigger PERSONAL by themselves. No classifier change
+    was needed; this test exists to lock the already-correct behaviour in."""
+    for message in (
+        'What is your name?',
+        'What time do trains leave for Delhi?',
+        'When did India get independence?',
+        "What is today's weather like in general?",
+        'Who was the first prime minister of India?',
+        'Can you help me understand how rain forms?',
+        'Tell me a story about a king.',
+        'Please give me a recipe for tea.',
+        'Show me how to fry an egg.',
+    ):
+        assert classify_topic(message) == 'general', message
+
+
 def test_medicine_general_knowledge_vs_personal_medicine_query():
     assert classify_topic('What is Metformin used for?') == 'general'
     assert classify_topic('When is my medicine?') == 'personal'

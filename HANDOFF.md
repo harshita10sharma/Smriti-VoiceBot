@@ -74,6 +74,34 @@ Response fields the UI needs:
 | `requires_confirmation` | Show a large Yes / No. Send the answer as the next turn in the same session. |
 | `language` | Which language the answer is in |
 
+**Opening the app — welcome turn:**
+
+```http
+POST /v1/conversation/welcome
+x-api-key: <server key>
+{"user_id": "elder-1", "session_id": null, "language": "eng", "speak": false}
+```
+
+Call this once when the app opens, before the user has said anything. It creates a session
+(or restores the one you pass as `session_id`) and returns a deterministic greeting —
+never LLM-generated, never counted as a user turn, never written into conversation
+history, so the user's actual first spoken/typed message afterward is unaffected. Set
+`speak: true` to also get a `job_id`/audio the same way the voice endpoint does (poll and
+fetch exactly as below); omit it or leave it `false` for text-only. `session_restored` in
+the response tells you whether the `session_id` you sent was recognized (`true`) or a new
+session was started (`false`).
+
+**Optional: exactly-once delivery.** Send an `Idempotency-Key` header (any string, ≤128
+chars) on `POST /v1/conversation` or `POST /v1/conversation/voice` if your client might
+retry a request after a timeout. The same key with the same request body returns the
+original result without re-running anything (safe against double-executing a confirmed
+action like a phone call); the same key with a different body is rejected with `409`. Omit
+the header entirely and nothing changes from the behavior above.
+
+**A disabled patient** (set by the backend/caregiver system, not by any VoiceBot API)
+returns `403` on every patient-scoped endpoint, the same shape as an unauthorized
+`user_id`. There is no VoiceBot endpoint to disable a patient yet — see SECURITY.md.
+
 ## Rules that have not changed
 
 1. Execute only the allow-listed action strings, only when `action_accepted` is true.

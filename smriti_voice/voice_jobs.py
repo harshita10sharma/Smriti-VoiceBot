@@ -24,6 +24,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from .database.connection import Database
@@ -38,6 +39,9 @@ QUEUED = 'queued'
 PROCESSING = 'processing'
 COMPLETED = 'completed'
 FAILED = 'failed'
+CANCELLED = 'cancelled'
+_TERMINAL = {COMPLETED, FAILED, CANCELLED}
+_DT_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 @dataclass
@@ -59,8 +63,9 @@ class VoiceJobRepository:
     """Persisted job state. The schema is applied by MemoryRepository's own
     migration step; this class only reads/writes rows in the shared database."""
 
-    def __init__(self, database: Database) -> None:
+    def __init__(self, database: Database, *, processing_deadline_s: int = 180) -> None:
         self.db = database
+        self.processing_deadline_s = processing_deadline_s
 
     def create(self, *, user_id: str, session_id: str | None, language: str,
                response_text: str) -> str:
@@ -74,10 +79,37 @@ class VoiceJobRepository:
         return job_id
 
     def get(self, job_id: str) -> VoiceJob | None:
+        """Enforces the processing deadline at read time -- the same
+        lazy-expiry pattern ``tts.router.AudioStore.path_for`` already uses
+        for audio retention, so every caller (status poll, audio fetch, the
+        worker's own re-check) sees one consistent truth without a separate
+        background sweep. A job stuck ``processing`` longer than
+        ``processing_deadline_s`` is reported (and durably marked) FAILED
+        with ``PROCESSING_TIMEOUT`` -- this never claims a job completed
+        that didn't; if the stalled worker eventually does finish, its own
+        completion write is a no-op against an already-terminal row (see
+        mark_completed/mark_failed)."""
         with self.db.connect() as connection:
             row = connection.execute(
                 'SELECT * FROM voice_jobs WHERE job_id = ?', (job_id,)).fetchone()
-        return VoiceJob(**{key: row[key] for key in row.keys()}) if row else None
+            if row is None:
+                return None
+            job = VoiceJob(**{key: row[key] for key in row.keys()})
+            if job.status == PROCESSING and self._is_overdue(job.updated_at):
+                cursor = connection.execute(
+                    """UPDATE voice_jobs SET status = ?, error_code = ?, updated_at = datetime('now')
+                       WHERE job_id = ? AND status = ?""",
+                    (FAILED, 'PROCESSING_TIMEOUT', job_id, PROCESSING))
+                if cursor.rowcount > 0:
+                    job.status, job.error_code = FAILED, 'PROCESSING_TIMEOUT'
+        return job
+
+    def _is_overdue(self, updated_at: str) -> bool:
+        try:
+            started = datetime.strptime(updated_at, _DT_FORMAT).replace(tzinfo=timezone.utc)
+        except ValueError:
+            return False
+        return datetime.now(timezone.utc) - started > timedelta(seconds=self.processing_deadline_s)
 
     def get_by_audio_id(self, audio_id: str) -> VoiceJob | None:
         """Every audio_id in the system is produced by exactly one code path
@@ -91,7 +123,8 @@ class VoiceJobRepository:
     def mark_processing(self, job_id: str) -> bool:
         """Returns False if the job was not in `queued` state — the caller
         must treat that as "someone already handled this" and not proceed,
-        which is what prevents a job from being synthesised twice."""
+        which is what prevents a job from being synthesised twice. Also
+        the guard that stops a just-cancelled job from being picked up."""
         with self.db.connect() as connection:
             cursor = connection.execute(
                 """UPDATE voice_jobs SET status = ?, updated_at = datetime('now')
@@ -99,20 +132,48 @@ class VoiceJobRepository:
                 (PROCESSING, job_id, QUEUED))
             return cursor.rowcount > 0
 
-    def mark_completed(self, job_id: str, *, audio_id: str, tts_provider: str | None) -> None:
+    def mark_completed(self, job_id: str, *, audio_id: str, tts_provider: str | None) -> bool:
+        """Only transitions out of `processing` -- if the job was cancelled
+        (or already timed out) while synthesis was in flight, this is a
+        deliberate, silent no-op rather than resurrecting a job the caller
+        was told is no longer active. Returns whether it actually applied,
+        so a caller could clean up an audio file written for a job that
+        turned out to already be terminal (not done today: an orphaned
+        file just ages out via AudioStore's own retention)."""
         with self.db.connect() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 """UPDATE voice_jobs SET status = ?, audio_id = ?, tts_provider = ?,
                                          updated_at = datetime('now')
-                   WHERE job_id = ?""",
-                (COMPLETED, audio_id, tts_provider, job_id))
+                   WHERE job_id = ? AND status = ?""",
+                (COMPLETED, audio_id, tts_provider, job_id, PROCESSING))
+            return cursor.rowcount > 0
 
-    def mark_failed(self, job_id: str, *, error_code: str) -> None:
+    def mark_failed(self, job_id: str, *, error_code: str) -> bool:
+        """Transitions from `queued` or `processing` only -- never
+        overwrites an already-terminal status (completed/failed/cancelled)."""
         with self.db.connect() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 """UPDATE voice_jobs SET status = ?, error_code = ?, updated_at = datetime('now')
-                   WHERE job_id = ?""",
-                (FAILED, error_code, job_id))
+                   WHERE job_id = ? AND status IN (?, ?)""",
+                (FAILED, error_code, job_id, QUEUED, PROCESSING))
+            return cursor.rowcount > 0
+
+    def cancel(self, job_id: str) -> bool:
+        """Cancels a job that is still `queued` or `processing`. Returns
+        False (not an error) if the job is already terminal -- cancelling
+        something that already finished is not itself a failure. Race with
+        the worker: if the worker's mark_completed/mark_failed lands first,
+        this finds the job already terminal and does nothing; if this lands
+        first, the worker's later write is the no-op instead (see
+        mark_completed/mark_failed's own status guard) -- either order, the
+        job never reports COMPLETED after being told CANCELLED, and never
+        reports CANCELLED after actually completing."""
+        with self.db.connect() as connection:
+            cursor = connection.execute(
+                """UPDATE voice_jobs SET status = ?, error_code = ?, updated_at = datetime('now')
+                   WHERE job_id = ? AND status IN (?, ?)""",
+                (CANCELLED, 'CANCELLED_BY_CLIENT', job_id, QUEUED, PROCESSING))
+            return cursor.rowcount > 0
 
     def recover_stale_jobs(self) -> int:
         """Call once, at process startup, before the worker thread accepts

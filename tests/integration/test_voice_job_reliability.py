@@ -63,6 +63,7 @@ def test_recover_stale_jobs_marks_orphaned_queued_and_processing_jobs_failed(app
 def test_recover_stale_jobs_never_touches_terminal_jobs(app):
     repo: VoiceJobRepository = app.voice_jobs
     done = repo.create(user_id='demo-user', session_id=None, language='eng', response_text='ok')
+    repo.mark_processing(done)  # real usage always transitions through 'processing' first
     repo.mark_completed(done, audio_id='abc123', tts_provider='mock')
 
     recovered = repo.recover_stale_jobs()

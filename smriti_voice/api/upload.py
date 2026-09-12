@@ -12,7 +12,8 @@ ACCEPTED_CONTENT_TYPES = {
 READ_CHUNK_BYTES = 1024 * 1024
 
 
-async def read_wav_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
+async def read_wav_upload(upload: UploadFile, *, max_bytes: int,
+                          max_duration_s: float | None = None) -> bytes:
     if upload.content_type not in ACCEPTED_CONTENT_TYPES:
         raise HTTPException(415, 'Only WAV audio is accepted')
 
@@ -29,12 +30,12 @@ async def read_wav_upload(upload: UploadFile, *, max_bytes: int) -> bytes:
 
     raw = b''.join(chunks)
     try:
-        validate_wav_bytes(raw, max_bytes=max_bytes)
+        validate_wav_bytes(raw, max_bytes=max_bytes, max_duration_s=max_duration_s)
     except AudioError as exc:
         message = str(exc)
         if 'empty' in message:
             raise HTTPException(400, message) from exc
-        if 'larger than' in message:
+        if 'larger than' in message or 'exceeds the' in message:
             raise HTTPException(413, message) from exc
         raise HTTPException(415, message) from exc
     return raw

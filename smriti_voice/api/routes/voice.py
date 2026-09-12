@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from ...app import Application
 from ...idempotency import payload_hash
 from ...pipeline import VoicePipeline
-from ...schemas import VoiceJobStatusResponse, VoiceResponse
+from ...schemas import VoiceJobCancelResponse, VoiceJobStatusResponse, VoiceResponse
 from ..dependencies import (
     application,
     authorized_user_ids,
@@ -51,7 +51,8 @@ async def conversation_voice(
     if user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     ensure_patient_active(app, user_id)
-    raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes)
+    raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes,
+                                max_duration_s=app.config.max_wav_duration_s)
 
     if language and not app.languages.is_known(language):
         raise HTTPException(400, f'Unknown language: {language!r}')
@@ -112,14 +113,39 @@ def voice_job_status(
     app: Application = Depends(application),
     authorized: frozenset = Depends(authorized_user_ids),
 ) -> VoiceJobStatusResponse:
-    job = app.voice_jobs.get(job_id)
+    job = app.voice_jobs.get(job_id)  # also lazily applies the processing deadline
     # A job belonging to a user this credential isn't authorized for is
     # reported the same as a missing one, so a job id cannot be used to
     # probe for other users' job ids.
     if job is None or job.user_id not in authorized:
         raise HTTPException(404, 'Job not found')
+    audio_expired = (job.status == 'completed' and job.audio_id is not None
+                     and app.tts.store.path_for(job.audio_id) is None)
     return VoiceJobStatusResponse(
         job_id=job.job_id, status=job.status, language=job.language,
         audio_id=job.audio_id,
         audio_url=f'/v1/audio/{job.audio_id}' if job.audio_id else None,
-        tts_provider=job.tts_provider, error_code=job.error_code)
+        tts_provider=job.tts_provider, error_code=job.error_code,
+        audio_expired=audio_expired)
+
+
+@router.post('/v1/voice/jobs/{job_id}/cancel', response_model=VoiceJobCancelResponse)
+def cancel_voice_job(
+    job_id: str,
+    app: Application = Depends(application),
+    authorized: frozenset = Depends(authorized_user_ids),
+) -> VoiceJobCancelResponse:
+    """Cancels a job still `queued` or `processing`. Same not-found-vs-
+    unauthorized fail-closed behavior as job status/audio retrieval.
+    Cancelling an already-terminal job (completed/failed/cancelled) is not
+    an error -- it returns `cancelled=false` with that job's actual
+    current status, since there is nothing left to cancel. See
+    VoiceJobRepository.cancel for the exact race semantics against a
+    worker that may be mid-synthesis at the same moment."""
+    job = app.voice_jobs.get(job_id)
+    if job is None or job.user_id not in authorized:
+        raise HTTPException(404, 'Job not found')
+    cancelled = app.voice_jobs.cancel(job_id)
+    current = app.voice_jobs.get(job_id)
+    return VoiceJobCancelResponse(job_id=job_id, status=current.status if current else job.status,
+                                  cancelled=cancelled)

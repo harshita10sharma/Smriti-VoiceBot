@@ -165,3 +165,62 @@ live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be r
 - Prompt-injection detection is pattern-based. It is a defence in depth, not the primary
   control — the primary control is that the model cannot execute anything.
 - No penetration test has been performed against a deployed instance.
+
+## Operational readiness (pilot-scale, verified against this repository)
+
+- **Dependencies are minimum-pinned (`>=`), not exact-pinned.** `requirements.txt` does not
+  guarantee a byte-identical reproducible install across two setups. Generating a real
+  lockfile (`pip freeze` from the known-working environment) is a genuine, currently-open
+  gap, not something this revision changed — pinning blindly without re-validating every
+  dependency against the currently-working deployment would itself be a risk, so it was left
+  alone rather than guessed at.
+- **Migrations are append-only and idempotent** (`database/migrations.py`): each new version
+  is a new list entry, gated by SQLite's `PRAGMA user_version`, applied automatically the
+  first time `MemoryRepository` is constructed. Verified repeatedly against the real running
+  deployment's database across this project's migrations — each one upgraded the live file
+  in place with zero data loss, confirmed by direct inspection after each migration.
+- **Restart behavior**: sessions and pending confirmations now survive a restart (SQLite-
+  backed, see `conversation/context.py`); voice jobs left `queued`/`processing` at restart
+  are marked `failed` with `INTERRUPTED_BY_RESTART`, never silently retried or left stuck;
+  the rate limiter resets (in-memory, see above).
+- **`GET /v1/health` is a liveness check, not a readiness check gated on optional
+  providers.** It returns `status: 'ok'` whenever the process can respond at all, regardless
+  of which cloud providers are configured — Gemini/OpenAI/Sarvam/local-TTS are all
+  intentionally optional per deployment, and a health check that failed because an optional
+  provider is unconfigured would make an uptime monitor or Render's `healthCheckPath` kill a
+  perfectly healthy process. Provider/capability state is reported separately, as booleans,
+  in the same response, for a caller that wants readiness-style detail.
+- **Queue/processing limits**: the TTS worker's queue is bounded
+  (`SMRITI_VOICE_JOB_QUEUE_MAX`, default 200) and every job has a processing deadline
+  (`SMRITI_VOICE_JOB_PROCESSING_DEADLINE_S`, default 180s) enforced at read time — see
+  `voice_jobs.py`.
+- **Audio storage cleanup**: `AudioStore` deletes files past
+  `SMRITI_AUDIO_RETENTION_MINUTES` (default 15) both opportunistically on every new write and
+  at read time (a request for an expired file deletes it then, rather than waiting for the
+  next unrelated write) — verified in `tests/integration/test_voice_job_reliability.py`.
+- **Backup/restore**: the entire durable state is the single SQLite file at `SMRITI_DB_PATH`
+  plus the audio cache directory (`SMRITI_AUDIO_CACHE_DIR`, safely disposable — it is a
+  regenerable cache with its own retention policy, not source data). Stopping the process and
+  copying that one file is a consistent backup; there is no separate backup tooling in this
+  repository today.
+- **Staging vs. production**: `SMRITI_ENV` (see the fail-closed-auth section above) is the
+  only environment-mode distinction that exists in code today; there is no separate
+  staging-vs-production config profile beyond environment variables the operator sets per
+  deployment.
+- **Credential rotation**: rotating `SMRITI_API_KEY`/`SMRITI_API_KEYS` requires updating the
+  environment variable and restarting the process (no in-place reload); rotating a cloud
+  provider key (`SARVAM_API_KEY`, `GROQ_API_KEY`, etc.) is the same. Neither operation loses
+  any patient data — memory, sessions and voice jobs are keyed by `user_id`, never by the API
+  key itself.
+- **A real, measured latency observation** (recorded here since it directly bears on the
+  "should the whole voice turn be async" question, not just TTS): with the real Groq LLM
+  provider and a stubbed ASR stage (no cloud/local ASR is reachable in this development
+  environment), the synchronous ASR+conversation portion of a voice turn measured 785ms,
+  684ms and 8,826ms of LLM latency across 3 live runs (n=3; one run's LLM call spiked to
+  ~8.8s, plausibly a real provider-side latency variance or retry). Even the worst observed
+  run stayed well under the ~100s gateway timeout that is the documented reason TTS alone is
+  asynchronous, so no evidence from this measurement justifies making the whole voice turn
+  asynchronous — the current design (synchronous ASR+conversation, asynchronous TTS) is kept
+  unchanged. Real ASR latency remains unmeasured in this environment; if a future measurement
+  with a real ASR provider shows the combined path approaching the gateway timeout, that
+  would be new evidence to revisit this decision, not something to act on speculatively now.

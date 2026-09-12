@@ -10,9 +10,12 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Deque
+from typing import TYPE_CHECKING, Deque
 
 from ..schemas import ConversationTurn, PendingConfirmation, TurnKind, ToolResult
+
+if TYPE_CHECKING:
+    from ..memory.repository import MemoryRepository
 
 
 def _now() -> datetime:
@@ -76,57 +79,112 @@ class ConversationSession:
             self.pending = None
 
 
-class SessionStore:
-    """In-memory sessions with capacity and idle eviction.
+def _safe_turn_kind(raw: str) -> TurnKind:
+    """conversation_turns.kind stores the literal 'USER' for a user turn
+    (see ConversationManager._persist) alongside real TurnKind values for
+    assistant turns -- 'USER' is not itself a TurnKind member. Reconstructed
+    history only ever reads ``turn.role``/``turn.text`` (see
+    ConversationManager._history_messages), never ``turn.kind``, so any
+    unrecognized stored value safely falls back to CONVERSATION rather than
+    raising."""
+    try:
+        return TurnKind(raw)
+    except ValueError:
+        return TurnKind.CONVERSATION
 
-    Durable history lives in SQLite (``conversation_turns``); this store only
-    holds the live working state, so a restart loses nothing that matters.
+
+def _parse_db_dt(value: str) -> datetime:
+    """SQLite's ``datetime('now')`` produces 'YYYY-MM-DD HH:MM:SS', UTC,
+    with no timezone marker. Attach one so comparisons against ``_now()``
+    (timezone-aware) work correctly."""
+    return datetime.strptime(value, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+
+
+class SessionStore:
+    """Patient-scoped sessions, persisted in SQLite via ``MemoryRepository``.
+
+    Ownership, idle-timeout state, the pending confirmation and the last
+    conversational subject (for pronoun resolution) all survive a process
+    restart: a session reloaded after a restart looks exactly like it did
+    before, rather than silently vanishing mid-confirmation. Bounded
+    history is reconstructed from ``conversation_turns`` -- the existing
+    durable turn record -- so nothing here duplicates that table.
+
+    Call :meth:`save` once a turn has decided the session's new pending
+    confirmation / last-subject / language; ``get_or_create`` and the
+    session's own in-memory mutators (``add_turn``, ``set_pending``, ...)
+    do not write through automatically, exactly like the prior in-memory
+    version did not need to.
     """
 
-    def __init__(self, *, max_turns: int = 8, idle_timeout_minutes: int = 30,
-                 max_sessions: int = 500) -> None:
+    def __init__(self, repository: 'MemoryRepository', *, max_turns: int = 8,
+                 idle_timeout_minutes: int = 30) -> None:
+        self.repo = repository
         self.max_turns = max_turns
         self.idle_timeout_minutes = idle_timeout_minutes
-        self.max_sessions = max_sessions
-        self._sessions: dict[str, ConversationSession] = {}
 
     def get_or_create(self, session_id: str | None, user_id: str,
                       language: str = 'eng') -> ConversationSession:
-        self.evict_expired()
-        if session_id and session_id in self._sessions:
-            session = self._sessions[session_id]
-            # A session belongs to exactly one user; never hand it to another.
-            if session.user_id != user_id:
-                raise PermissionError('session does not belong to this user')
-            if session.is_expired():
-                del self._sessions[session_id]
-            else:
-                session.touch()
-                return session
-        session = ConversationSession(session_id=session_id or new_session_id(),
-                                      user_id=user_id, language=language,
-                                      max_turns=self.max_turns,
-                                      idle_timeout_minutes=self.idle_timeout_minutes)
-        if len(self._sessions) >= self.max_sessions:
-            oldest = min(self._sessions.values(), key=lambda s: s.last_active_at)
-            self._sessions.pop(oldest.session_id, None)
-        self._sessions[session.session_id] = session
-        return session
+        if session_id:
+            row = self.repo.get_session(session_id)
+            if row is not None:
+                # A session belongs to exactly one user; never hand it to another.
+                if row['user_id'] != user_id:
+                    raise PermissionError('session does not belong to this user')
+                session = self._from_row(row)
+                if not session.is_expired():
+                    return session
+                # Expired: never resurrect it under the same id (a stale
+                # pending confirmation must never come back to life) --
+                # a fresh session_id starts clean, exactly like the old
+                # in-memory store deleting and recreating did.
+        return self._create(user_id, language)
 
-    def evict_expired(self) -> int:
-        expired = [sid for sid, session in self._sessions.items() if session.is_expired()]
-        for sid in expired:
-            del self._sessions[sid]
-        return len(expired)
+    def _create(self, user_id: str, language: str) -> ConversationSession:
+        session_id = new_session_id()
+        self.repo.save_session_state(session_id, user_id, language,
+                                     pending_json=None, last_subject=None)
+        return ConversationSession(session_id=session_id, user_id=user_id, language=language,
+                                   max_turns=self.max_turns,
+                                   idle_timeout_minutes=self.idle_timeout_minutes)
+
+    def _from_row(self, row) -> ConversationSession:
+        keys = row.keys()
+        raw_turns = self.repo.recent_turns(row['session_id'], row['user_id'],
+                                           limit=self.max_turns * 2)
+        turns: Deque[ConversationTurn] = deque(
+            ConversationTurn(turn_id=t['turn_id'], session_id=t['session_id'],
+                             user_id=t['user_id'], role=t['role'], text=t['text'],
+                             language=t['language'], kind=_safe_turn_kind(t['kind']))
+            for t in raw_turns)
+        pending_json = row['pending_json'] if 'pending_json' in keys else None
+        pending = PendingConfirmation.model_validate_json(pending_json) if pending_json else None
+        return ConversationSession(
+            session_id=row['session_id'], user_id=row['user_id'], language=row['language'],
+            max_turns=self.max_turns, idle_timeout_minutes=self.idle_timeout_minutes,
+            turns=turns, pending=pending,
+            last_subject=row['last_subject'] if 'last_subject' in keys else None,
+            last_active_at=_parse_db_dt(row['last_active_at']),
+            created_at=_parse_db_dt(row['started_at']))
+
+    def save(self, session: ConversationSession) -> None:
+        """Persist the live state a turn may have changed: pending
+        confirmation, last subject, language. Call this once, after
+        routing has finished mutating the session for this turn."""
+        self.repo.save_session_state(
+            session.session_id, session.user_id, session.language,
+            pending_json=session.pending.model_dump_json() if session.pending else None,
+            last_subject=session.last_subject)
 
     def drop(self, session_id: str) -> None:
-        self._sessions.pop(session_id, None)
+        self.repo.delete_session(session_id)
 
     def exists(self, session_id: str) -> bool:
-        """True if this exact session_id is currently tracked (not expired,
-        not evicted). Used to report whether a welcome/session-init call
+        """True if this exact session_id is currently tracked and not
+        expired. Used to report whether a welcome/session-init call
         restored an existing session or started a fresh one."""
-        return session_id in self._sessions
-
-    def __len__(self) -> int:
-        return len(self._sessions)
+        row = self.repo.get_session(session_id)
+        if row is None:
+            return False
+        age = _now() - _parse_db_dt(row['last_active_at'])
+        return age <= timedelta(minutes=self.idle_timeout_minutes)

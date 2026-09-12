@@ -123,34 +123,41 @@ live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be r
 
 ## Known limitations
 
-- The rate limiter and the session store are both per-process, in-memory singletons. This
-  deployment relies on running exactly **one** Uvicorn worker (`Dockerfile`'s `--workers 1`)
-  as a hard invariant: a multi-worker/multi-replica deployment would silently give each
-  worker its own disjoint sessions and rate-limit budget, with no error raised. A running
-  process cannot reliably detect its own sibling workers (they share no memory and signal
-  nothing to each other), so this is **not** fully enforced — it is a best-effort,
-  clearly-labeled guard: `tools/validate_config.py` fails hard (exit 1) if `WEB_CONCURRENCY`
-  or `UVICORN_WORKERS` indicates more than one worker, and the API logs a loud
-  `unsafe_multi_worker_configuration_detected` error at startup for the same signal. Neither
-  check can catch every way of accidentally starting more than one worker (e.g. a bare
-  `uvicorn ... --workers 4` with no env var set at all) — the actual safety comes from the
-  Dockerfile hardcoding `--workers 1`, not from runtime detection.
-- Sessions are in-memory, so a restart drops every session and every pending confirmation.
-  This is the deliberately safer failure mode: a lost confirmation can never be silently
-  auto-resolved, and a session id from before the restart is simply unknown afterward (never
-  reassigned to a different patient) — the next request for that patient just gets a fresh
-  session. Nothing currently persists this across a restart; this is a deliberate choice,
-  not an oversight, pending a decision on whether a backend integration actually requires
-  session continuity across a restart.
+- The rate limiter is a per-process, in-memory singleton. This deployment relies on running
+  exactly **one** Uvicorn worker (`Dockerfile`'s `--workers 1`) as a hard invariant: a
+  multi-worker/multi-replica deployment would silently give each worker its own disjoint
+  rate-limit budget, with no error raised. A running process cannot reliably detect its own
+  sibling workers (they share no memory and signal nothing to each other), so this is **not**
+  fully enforced — it is a best-effort, clearly-labeled guard: `tools/validate_config.py`
+  fails hard (exit 1) if `WEB_CONCURRENCY` or `UVICORN_WORKERS` indicates more than one
+  worker, and the API logs a loud `unsafe_multi_worker_configuration_detected` error at
+  startup for the same signal. Neither check can catch every way of accidentally starting
+  more than one worker (e.g. a bare `uvicorn ... --workers 4` with no env var set at all) —
+  the actual safety comes from the Dockerfile hardcoding `--workers 1`, not from runtime
+  detection.
+- Sessions (`conversation/context.py`'s `SessionStore`) are persisted in SQLite (the existing
+  `conversations` table, extended with `pending_json`/`last_subject`): ownership, idle-timeout
+  state and any pending confirmation all survive a process restart intact and correctly
+  scoped to their owning patient — verified by rebuilding a completely independent
+  `Application` against the same database file and resolving a confirmation that was created
+  before the rebuild (see `tests/integration/test_persistent_sessions.py`). An expired session
+  is never resurrected under its old id after a restart, exactly as before this change. This
+  also means, incidentally, that multiple worker processes sharing the same database file
+  would now see consistent session state (the rate-limiter caveat above still applies to
+  those, independently).
 - `SMRITI_ALLOW_UNAUTHENTICATED=1` is a real foot-gun if set in production; the application
   now refuses to start in that combination unless `SMRITI_ENV=development` is also set.
-- `POST /v1/command` (the preserved v4.1 endpoint) has **no `user_id`/patient-ownership
-  concept at all** — any key valid for any patient can drive it — and its call-action path
-  (`engine.py`'s `SemanticIntent`) does **not** have the same confirmation gate as the
-  conversational path (`ConversationManager`): a call action there executes without a
-  two-step yes/no. This is unchanged from v4.1 by design (its contract is frozen for
-  existing clients) and is a known, documented gap, not something this revision claims to
-  have fixed.
+- `POST /v1/command` (the preserved v4.1 endpoint) still has **no `user_id`/patient-ownership
+  concept at all** — any key valid for any patient can drive it, and it never touches any
+  patient-scoped memory, so there is nothing for it to read or write across a patient
+  boundary. Its call-action path (`engine.py`'s `VoiceEngine.process`) previously reported
+  `accepted=true` for `CALL_BINA`/`CALL_PRIMARY_CONTACT` with no confirmation step at all,
+  unlike the conversational path's explicit two-step yes/no. This has been fixed: a call
+  action is still recognized (the `action` field still reports it, for observability) but is
+  never authorized here — `accepted` is always `false` for a call action on this endpoint,
+  with `reason=call_requires_confirmation_use_conversation_endpoint`. Placing a call now
+  requires the conversational path (`POST /v1/conversation`) on every path through this
+  codebase, not just the newer one. Every other `/v1/command` action is unaffected.
 - There is no HTTP endpoint to disable a patient. `users.active` exists in the schema and is
   enforced on every patient-scoped route, but flipping it requires direct, trusted access to
   the VoiceBot's database (or a future backend-owned admin endpoint, not yet built) — it is

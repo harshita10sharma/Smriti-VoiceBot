@@ -66,7 +66,7 @@ class Application:
             config, memory=memory, registry=registry, llm=llm, languages=languages,
             policy=policy, weather=weather if weather is not None else OpenMeteoWeatherProvider(),
             offline_manager=offline, telemetry=telemetry,
-            sessions=SessionStore(max_turns=config.max_history_turns,
+            sessions=SessionStore(repository, max_turns=config.max_history_turns,
                                   idle_timeout_minutes=config.max_session_idle_minutes))
         # Shares the same database/migration as MemoryRepository above.
         voice_jobs = VoiceJobRepository(repository.db)

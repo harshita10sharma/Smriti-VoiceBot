@@ -7,6 +7,9 @@
 3. On the red microphone tap, capture one utterance and send one WAV request.
 4. If `accepted=false`, do not execute anything. Show the large touch fallback.
 5. Execute only these action strings: `OPEN_PLAY`, `OPEN_MY_PEOPLE`, `OPEN_TODAY`, `CALL_BINA`, `OPEN_MEDICINE`, `HELP`, `STOP`.
+   `CALL_BINA` is recognized by `/v1/command` but **never returns `accepted=true` there** —
+   this endpoint has no confirmation step, so placing a call always requires the
+   `/v1/conversation` flow below (which does confirm). This is intentional.
 6. Never expose an arbitrary transcript as an executable command.
 7. Keep medicine editing outside voice commands.
 

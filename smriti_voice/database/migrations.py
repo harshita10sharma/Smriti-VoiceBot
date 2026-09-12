@@ -305,6 +305,19 @@ MIGRATIONS: list[str] = [
         applied_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     """,
+    # -- 6 ------------------------------------------------------------------
+    # Makes session ownership and pending-confirmation state survive a
+    # process restart. The `conversations` table already durably records
+    # every session (session_id, user_id, language) and every turn lives in
+    # `conversation_turns` -- this only adds the two pieces that used to
+    # live purely in the in-memory SessionStore: the currently-pending
+    # confirmation (as JSON; NULL when nothing is pending) and the last
+    # subject mentioned (for pronoun resolution). No new table: reusing the
+    # existing session record rather than inventing a parallel one.
+    """
+    ALTER TABLE conversations ADD COLUMN pending_json TEXT;
+    ALTER TABLE conversations ADD COLUMN last_subject TEXT;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

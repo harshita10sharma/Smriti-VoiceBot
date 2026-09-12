@@ -1,0 +1,32 @@
+{
+  "request_id": "ff996816450c48a09228b5ae08fb2527",
+  "session_id": "8ed26ef3e630462f8443a0268819d000",
+  "response_text": "Your daughter is called Bina.",
+  "language": "eng",
+  "language_confidence": 0.0,
+  "kind": "CONVERSATION",
+  "action": "NO_ACTION",
+  "action_accepted": false,
+  "tool_calls": [],
+  "tool_results": [],
+  "safety": null,
+  "requires_confirmation": false,
+  "metadata": {
+    "request_id": "ff996816450c48a09228b5ae08fb2527",
+    "session_id": "8ed26ef3e630462f8443a0268819d000",
+    "kind": "CONVERSATION",
+    "execution_mode": "ONLINE_PRIMARY",
+    "offline": false,
+    "fallback_used": false,
+    "asr_provider": null,
+    "asr_latency_ms": 0,
+    "llm_provider": "mock",
+    "llm_latency_ms": 0,
+    "tool_latency_ms": 0,
+    "tts_provider": null,
+    "tts_latency_ms": 0,
+    "total_latency_ms": 43,
+    "error_code": null,
+    "topic": "personal"
+  }
+}

@@ -30,7 +30,7 @@ from ...memory.models import DailyRoutine, FamilyMember, Medicine
 from ...memory.provenance import provenance_for_write
 from ...memory.repository import CAREGIVER_SYNC_MARKER
 from ...schemas import MemorySyncRequest, MemorySyncResponse
-from ..dependencies import application, authorized_user_ids, ensure_patient_active, require_api_key
+from ..dependencies import application, authorized_user_ids, require_api_key
 
 log = get_logger('api.memory_sync')
 
@@ -69,7 +69,15 @@ def memory_sync(
     newer revision applies and is recorded."""
     if payload.user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
-    ensure_patient_active(app, payload.user_id)
+    # Deliberately NOT gated by ensure_patient_active: this is the
+    # caregiver data-management channel, not a patient-facing
+    # conversational endpoint, and it is also the only way a backend can
+    # revoke or restore a patient (payload.active, below) through the
+    # existing contract with no separate admin API. Gating this on the
+    # patient's current active state would make re-enabling impossible --
+    # the very re-enable request would be rejected because the patient is
+    # still disabled at the moment it arrives. Conversation/voice/welcome
+    # remain gated; only data curation does not.
 
     provenance = provenance_for_write(source=SYNC_SOURCE, created_by=CAREGIVER_SYNC_MARKER)
 
@@ -105,7 +113,7 @@ def memory_sync(
             payload.user_id, family_members=family_members, medicines=medicines,
             routines=routines, display_name=payload.display_name,
             external_id=payload.external_id, timezone=payload.timezone,
-            language_code=payload.language_code,
+            language_code=payload.language_code, active=payload.active,
             source_revision=payload.source_revision, schema_version=payload.schema_version,
             content_hash=_content_hash(payload) if payload.source_revision is not None else None)
     except sqlite3.IntegrityError as exc:

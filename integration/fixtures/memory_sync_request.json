@@ -1,0 +1,35 @@
+{
+  "user_id": "elder-1",
+  "display_name": "Elder One",
+  "timezone": "Asia/Kolkata",
+  "language_code": "eng",
+  "source_revision": 1,
+  "schema_version": 1,
+  "family_members": [
+    {
+      "name": "Bina",
+      "relationship": "daughter",
+      "phone_available": true,
+      "external_id": "person-uuid-1"
+    }
+  ],
+  "medicines": [
+    {
+      "name": "Metformin",
+      "dose": "500mg",
+      "active": true,
+      "chosen_time_min": 480,
+      "window_start_min": 420,
+      "window_end_min": 540,
+      "days_of_week": "1,2,3,4,5,6,7",
+      "external_id": "med-uuid-1"
+    }
+  ],
+  "daily_routines": [
+    {
+      "activity": "Breakfast",
+      "time": "08:00",
+      "external_id": "routine-uuid-1"
+    }
+  ]
+}

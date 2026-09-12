@@ -1,0 +1,39 @@
+{
+  "401_missing_key": {
+    "status": 401,
+    "body": {
+      "detail": "Invalid API key"
+    }
+  },
+  "403_unauthorized_patient": {
+    "status": 403,
+    "body": {
+      "detail": "user_id is not authorized for this API credential"
+    }
+  },
+  "422_missing_field": {
+    "status": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "missing",
+          "loc": [
+            "body",
+            "message"
+          ],
+          "msg": "Field required",
+          "input": {
+            "user_id": "elder-1",
+            "language": "eng"
+          }
+        }
+      ]
+    }
+  },
+  "409_stale_memory_sync_revision": {
+    "status": 409,
+    "body": {
+      "detail": "source_revision 3 is older than the currently applied revision 5"
+    }
+  }
+}

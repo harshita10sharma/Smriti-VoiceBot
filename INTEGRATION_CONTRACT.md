@@ -65,10 +65,13 @@ See `SECURITY.md` §Authentication for full detail; summary for integration purp
   auto-provisions a bare `users` row on first contact (memory sync or first conversation
   turn). Authorization is checked first and independently, from the key config, never from
   whether a `users` row exists.
-- **Disabled patient**: `users.active = 0` (set via direct DB access or your own
-  memory-repository call — there is no HTTP endpoint for this in VoiceBot today, see §12)
-  makes every patient-scoped endpoint return `403`, even for an otherwise-valid, authorized
-  key. Verified end-to-end: `test_disabled_patient_is_rejected_at_every_entry_point`.
+- **Disabled patient**: `users.active = 0` — set via `POST /v1/memory/sync`'s `active` field
+  (see §8's revocation note; no separate admin endpoint) — makes every conversational/voice
+  endpoint return `403` for that patient, even for an otherwise-valid, authorized key.
+  `POST /v1/memory/sync` itself remains reachable regardless of `active`, since it's the only
+  path that can restore it. Verified end-to-end:
+  `test_disabled_patient_is_rejected_at_every_conversational_entry_point`,
+  `test_memory_sync_can_disable_a_patient`, `test_memory_sync_can_re_enable_a_disabled_patient`.
 - **Cross-patient access**: fails closed. `403` for a session/action outside your
   authorized set; `404` (not `403`) for a job/audio id that either doesn't exist or belongs
   to a patient you're not authorized for — a job id can never be used to probe for another
@@ -270,8 +273,10 @@ Full detail: `HANDOFF.md`, `BACKEND_APP_DEVELOPER_BACKGROUND.md`. Summary:
   - newer revision → `200`, `status: "applied"`, new revision recorded
 - **Structured fields survive sync**: `chosen_time_min`/`window_start_min`/
   `window_end_min`/`days_of_week` on medicines; `timezone`/`language_code`/`display_name`/
-  `external_id` on the patient; `is_deceased`/`memory_prompt`/`external_id` on family
-  members — all round-trip through `sync` → SQLite → the tool payloads the model sees.
+  `external_id`/`active` (revocation, see §8) on the patient; `is_deceased`/`memory_prompt`/
+  `external_id` on family members — all round-trip through `sync` → SQLite → the tool
+  payloads the model sees. `active` follows the same omit-preserves rule as every other
+  patient-context field: omitting it never changes the current enabled/disabled state.
 - **No raw phone numbers, ever.** `phone_available: bool` only; any `phone`/`phone_number`/
   etc. field is rejected with `422` (schema `extra='forbid'`), not silently dropped.
 - **Patient timezone actually affects behavior.** "What medicine do I take tonight" resolves
@@ -281,6 +286,32 @@ Full detail: `HANDOFF.md`, `BACKEND_APP_DEVELOPER_BACKGROUND.md`. Summary:
 ---
 
 ## 7. Error code table
+
+### Error envelope (verified against actual responses, not assumed)
+
+Every non-2xx response from an endpoint that takes a JSON/multipart body uses FastAPI's
+default shape, unchanged:
+
+```jsonc
+// A raised HTTPException (401/403/404/409/413/415/429/500/503):
+{"detail": "user_id is not authorized for this API credential"}
+
+// A Pydantic validation failure (422) — `detail` is a LIST of field errors, not a string:
+{"detail": [{"type": "missing", "loc": ["body", "message"], "msg": "Field required",
+            "input": {...}}]}
+```
+
+There is **no separate `error_code`/`retryable`/`request_id` envelope wrapping these** —
+introducing one now would be a breaking response-shape change for every existing client with
+no demonstrated need, so this document instead makes the *existing* shape and its stable
+`detail` text patterns the contract (see the table below for what each status/cause means).
+The one place a genuinely machine-readable, stable code already exists is the voice-job
+`error_code` field (`QUEUE_OVERLOADED`, `PROCESSING_TIMEOUT`, `INTERRUPTED_BY_RESTART`,
+`NO_TTS_PROVIDER_SUPPORTS_LANGUAGE`, `TTS_UNAVAILABLE`, etc.) — use that where it exists;
+fall back to HTTP status + the `detail` text for everything else. `detail` strings for a
+given condition are stable (verified: `test_e2e_contract_harness.py`,
+`test_patient_lifecycle.py`) but are English prose, not an enum — match on substrings if you
+must branch on them, or prefer the HTTP status code, which is the actually-stable contract.
 
 | HTTP | Meaning | Example `error_code`/cause | Retryable? | Client action |
 |---|---|---|---|---|
@@ -322,9 +353,12 @@ synchronization failed'`/`'Internal error'`-style text, never `str(exc)` directl
 - Preserve the privacy boundary: caregiver access to a patient's profile does **not** imply
   access to that patient's private AI conversation history — that's a Backend-side
   permission decision, not something VoiceBot enforces or assumes for you.
-- There is currently **no HTTP endpoint to disable a patient** — this requires direct,
-  trusted database access to flip `users.active`, or you build your own admin path on top
-  (not provided by this repository). Flag this early if your rollout needs it.
+- **Revoke or restore a patient via `POST /v1/memory/sync`'s `active` field** (`true` /
+  `false` / omit to leave unchanged) — no separate admin endpoint exists, and none is
+  needed: sending `{"user_id": "...", "active": false, ...}` (with the usual required
+  arrays) disables every conversational/voice endpoint for that patient immediately;
+  sending `active: true` restores it. This route is intentionally reachable even for an
+  already-disabled patient, specifically so re-enabling is possible.
 
 ## 9. Flutter responsibilities
 
@@ -418,3 +452,59 @@ planning:
 See `HANDOFF.md`'s language table for the full, verified-against-source matrix (Hindi,
 Assamese, Meiteilon, Khasi, Mizo, English). Read `GET /v1/languages` live for current state
 — this document is a planning snapshot, not a runtime source of truth.
+
+---
+
+## 14. Flutter client state machine
+
+A concrete state machine for the app-open-to-audio-playback flow, using only fields that
+actually exist in the response schemas above. This describes the *client's* states, not
+VoiceBot's turn/job states (§4) — map between them as shown.
+
+```
+IDLE
+  -> WELCOME_LOADING      (POST /v1/conversation/welcome)
+  -> LISTENING            (welcome received; mic available on explicit tap)
+  -> SENDING              (user tapped mic, recorded, POST /v1/conversation/voice sent)
+  -> RESPONSE_READY       (response_text received -- show it immediately, regardless of TTS)
+  -> AUDIO_QUEUED         (if speak was requested and job_id is non-null; poll job status)
+  -> AUDIO_PLAYING        (job status == 'completed', audio fetched and playing)
+  -> LISTENING            (playback finished; ready for the next utterance)
+```
+
+Failure/exception paths from each state:
+
+```
+SENDING          -> NETWORK_ERROR     (the HTTP call itself failed/timed out; show a retry
+                                        affordance, do not assume anything executed)
+AUDIO_QUEUED     -> FAILED            (job status == 'failed'; response_text from
+                                        RESPONSE_READY is still valid and already shown --
+                                        text never depends on TTS succeeding)
+AUDIO_QUEUED     -> CANCELLED         (user backed out / navigated away; call
+                                        POST /v1/voice/jobs/{id}/cancel, then discard the
+                                        job_id -- do not act on any later poll result for it)
+AUDIO_PLAYING    -> AUDIO_EXPIRED     (job status == 'completed' but audio_expired == true,
+                                        or a GET /v1/audio/{id} fetch itself returns 404 after
+                                        completion; fall back to text-only, this is not an
+                                        error to alarm the user about)
+```
+
+Non-negotiable client rules (all already implied by fields in §2, restated explicitly):
+
+1. **Never hold the VoiceBot `x-api-key`** — the client talks to its own Backend, which
+   proxies to VoiceBot.
+2. **Never execute raw model/transcript text as a command.** Only act on `action` when
+   `action_accepted == true`, and only on the allow-listed strings (§11).
+3. **Show `response_text` the moment it arrives** — never block the UI on `job_status`.
+4. **Stop polling the instant `status` is terminal** (`completed`/`failed`/`cancelled`) —
+   polling a terminal job forever wastes a request every 1–2s for no reason.
+5. **Cancel, don't just stop polling**, when the user discards a request in flight — an
+   un-cancelled job keeps synthesizing on the server for no one.
+6. **Ignore a poll result for a `job_id` you've already cancelled or superseded** — the
+   server-side race safety (§4) guarantees the *job's* state is correct, but the client's
+   own UI state should independently never resurrect a result it already gave up on.
+7. **Give medication-reminder/alarm audio priority over AI playback** — this is
+   Flutter-owned (VoiceBot has no concept of device alarms at all, see §11's "do not
+   implement" list).
+8. **Handle `audio_expired` as a normal, expected outcome**, not an error state — text is
+   already showing; there is nothing to alarm the user about.

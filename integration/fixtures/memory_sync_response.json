@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "user_id": "elder-1",
+  "family_members_synced": 1,
+  "medicines_synced": 1,
+  "daily_routines_synced": 1,
+  "status": "applied",
+  "source_revision": 1
+}

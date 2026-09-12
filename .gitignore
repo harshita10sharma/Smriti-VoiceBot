@@ -222,6 +222,7 @@ __marimo__/
 # secrets
 .env.*
 !.env.example
+!.env.staging.example
 
 # runtime data
 logs/*.jsonl

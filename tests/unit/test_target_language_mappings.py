@@ -114,6 +114,18 @@ def test_llm_conversation_is_not_actually_blocked_for_unlisted_languages(app):
         assert name_fragment in provider.calls[-1]['system']
 
 
+def test_capability_reporting_consistently_notes_unmeasured_llm_quality():
+    """Reporting-contract conformance (integration batch 5, Phase 10): mni
+    already said 'LLM generation quality not measured' in its
+    known_limitations; kha/lus previously did not, even though the exact
+    same fact applies to all three (see
+    test_llm_conversation_is_not_actually_blocked_for_unlisted_languages).
+    Fixed to be consistent -- this locks that fix in."""
+    from smriti_voice.language.capabilities import STATIC_LIMITATIONS
+    for code in ('mni', 'kha', 'lus'):
+        assert any('quality not measured' in note for note in STATIC_LIMITATIONS[code]), code
+
+
 def test_no_language_reports_supported_without_a_measured_validation_record():
     """Restates the existing, already-enforced rule (language/capabilities.py)
     for the three specific target languages this audit is about: adapter

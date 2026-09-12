@@ -100,14 +100,64 @@ def test_disabled_patient_denied_on_welcome(client, auth_headers):
     assert resp.status_code == 403
 
 
-def test_disabled_patient_denied_on_memory_sync(client, auth_headers):
+def test_memory_sync_is_not_gated_by_active_state(client, auth_headers):
+    """Deliberately NOT a 403: memory/sync is the data-management/
+    revocation channel, not a patient-facing endpoint (see
+    api/routes/memory_sync.py). Gating it on `active` would make
+    re-enabling a disabled patient impossible -- the re-enable request
+    itself would be rejected as coming from a disabled patient."""
     client.app.state.application.memory.repo.upsert_user(
         User(user_id='demo-user', display_name='Demo', active=False))
     resp = client.post('/v1/memory/sync',
                        json={'user_id': 'demo-user', 'family_members': [],
                              'medicines': [], 'daily_routines': []},
                        headers=auth_headers)
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+
+
+def test_memory_sync_can_re_enable_a_disabled_patient(client, auth_headers):
+    repo = client.app.state.application.memory.repo
+    repo.upsert_user(User(user_id='demo-user', display_name='Demo', active=False))
+    assert repo.is_user_active('demo-user') is False
+
+    resp = client.post('/v1/memory/sync',
+                       json={'user_id': 'demo-user', 'active': True, 'family_members': [],
+                             'medicines': [], 'daily_routines': []},
+                       headers=auth_headers)
+    assert resp.status_code == 200
+    assert repo.is_user_active('demo-user') is True
+
+    # And the previously-disabled patient can now use conversation again.
+    convo = client.post('/v1/conversation',
+                        json={'user_id': 'demo-user', 'message': 'hello', 'language': 'eng'},
+                        headers=auth_headers)
+    assert convo.status_code == 200
+
+
+def test_memory_sync_can_disable_a_patient(client, auth_headers):
+    repo = client.app.state.application.memory.repo
+    resp = client.post('/v1/memory/sync',
+                       json={'user_id': 'demo-user', 'active': False, 'family_members': [],
+                             'medicines': [], 'daily_routines': []},
+                       headers=auth_headers)
+    assert resp.status_code == 200
+    assert repo.is_user_active('demo-user') is False
+
+    convo = client.post('/v1/conversation',
+                        json={'user_id': 'demo-user', 'message': 'hello', 'language': 'eng'},
+                        headers=auth_headers)
+    assert convo.status_code == 403
+
+
+def test_memory_sync_omitting_active_never_changes_current_state(client, auth_headers):
+    repo = client.app.state.application.memory.repo
+    repo.upsert_user(User(user_id='demo-user', display_name='Demo', active=False))
+
+    client.post('/v1/memory/sync',
+               json={'user_id': 'demo-user', 'family_members': [], 'medicines': [],
+                    'daily_routines': []},
+               headers=auth_headers)
+    assert repo.is_user_active('demo-user') is False  # untouched by omission
 
 
 def test_reenabled_patient_is_served_again(client, auth_headers):

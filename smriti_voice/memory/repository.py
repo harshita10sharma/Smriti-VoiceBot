@@ -532,6 +532,7 @@ class MemoryRepository:
                               medicines: list[Medicine], routines: list[DailyRoutine],
                               display_name: str | None = None, external_id: str | None = None,
                               timezone: str | None = None, language_code: str | None = None,
+                              active: bool | None = None,
                               source_revision: int | None = None, schema_version: int = 1,
                               content_hash: str | None = None) -> 'SyncOutcome':
         """Atomically replace this user's caregiver-synced family members,
@@ -596,18 +597,29 @@ class MemoryRepository:
             # separately, for the UPDATE branch's own COALESCE-with-existing,
             # so omitting a field on a later sync never overwrites a value
             # set some other way with a placeholder default.
+            # `active` follows the same omit-preserves / explicit-overwrites
+            # rule: None leaves the patient's current enabled/disabled
+            # state untouched (a normal sync never accidentally re-enables
+            # a revoked patient or disables an active one); explicitly
+            # sending True/False is how a backend revokes or restores
+            # access through this existing endpoint, with no separate
+            # admin API. A brand-new patient defaults to active (1).
+            active_param = None if active is None else int(active)
             connection.execute(
                 """INSERT INTO users (user_id, display_name, external_id, timezone,
-                                      preferred_language)
-                   VALUES (?, ?, ?, COALESCE(?, 'Asia/Kolkata'), COALESCE(?, 'eng'))
+                                      preferred_language, active)
+                   VALUES (?, ?, ?, COALESCE(?, 'Asia/Kolkata'), COALESCE(?, 'eng'),
+                           COALESCE(?, 1))
                    ON CONFLICT(user_id) DO UPDATE SET
                        display_name = COALESCE(?, display_name),
                        external_id = COALESCE(?, external_id),
                        timezone = COALESCE(?, timezone),
                        preferred_language = COALESCE(?, preferred_language),
+                       active = COALESCE(?, active),
                        updated_at = datetime('now')""",
                 (user_id, display_name or user_id, external_id, timezone, language_code,
-                 display_name, external_id, timezone, language_code))
+                 active_param,
+                 display_name, external_id, timezone, language_code, active_param))
 
             connection.execute(
                 """DELETE FROM family_members

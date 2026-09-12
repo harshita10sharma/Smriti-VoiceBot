@@ -1,0 +1,15 @@
+{
+  "request_id": "b912483fc5bc42cda6ce0852047f9d65",
+  "session_id": "8ed26ef3e630462f8443a0268819d000",
+  "response_text": "Hello, Ravi Sharma. I am here with you. Whenever you are ready, just tap and speak.",
+  "language": "eng",
+  "kind": "WELCOME",
+  "session_restored": false,
+  "job_id": null,
+  "job_status": "NOT_REQUESTED",
+  "audio_id": null,
+  "audio_url": null,
+  "audio_available": false,
+  "audio_unavailable_reason": "TTS_NOT_REQUESTED",
+  "tts_provider": null
+}

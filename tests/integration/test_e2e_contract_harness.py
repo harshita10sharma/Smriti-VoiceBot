@@ -138,7 +138,12 @@ def test_cross_patient_isolation_across_the_full_chain(client, app, monkeypatch)
 # --------------------------------------------------------------------------- #
 # Disabled patient rejected end-to-end (welcome, conversation, voice, sync)
 # --------------------------------------------------------------------------- #
-def test_disabled_patient_is_rejected_at_every_entry_point(client, app, auth_headers):
+def test_disabled_patient_is_rejected_at_every_conversational_entry_point(client, app, auth_headers):
+    """memory/sync is deliberately excluded here: it is the data-management/
+    revocation channel, not a patient-facing endpoint, and is the only way
+    a backend can re-enable a disabled patient through the existing
+    contract -- see test_patient_lifecycle.py's dedicated revocation
+    tests for that behavior."""
     app.memory.repo.upsert_user(User(user_id='demo-user', display_name='Demo', active=False))
 
     assert client.post('/v1/conversation/welcome', headers=auth_headers,
@@ -146,9 +151,6 @@ def test_disabled_patient_is_rejected_at_every_entry_point(client, app, auth_hea
     assert client.post('/v1/conversation', headers=auth_headers,
                        json={'user_id': 'demo-user', 'message': 'hi',
                             'language': 'eng'}).status_code == 403
-    assert client.post('/v1/memory/sync', headers=auth_headers,
-                       json={'user_id': 'demo-user', 'family_members': [],
-                            'medicines': [], 'daily_routines': []}).status_code == 403
 
 
 # --------------------------------------------------------------------------- #

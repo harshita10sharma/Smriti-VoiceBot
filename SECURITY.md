@@ -123,6 +123,17 @@ live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be r
 
 ## Known limitations
 
+- Two config fields are loaded from the environment but never actually consumed anywhere
+  else in the codebase (verified by grep, not assumed): `ProviderConfig.llm_model_local`
+  (`SMRITI_LOCAL_LLM_PATH`) — the real local-LLM provider (`llm/local.py`) reads
+  `SMRITI_LOCAL_LLM_URL` directly instead — and `AppConfig.weather_provider`
+  (`SMRITI_WEATHER_PROVIDER`) — weather provider selection is hardcoded to
+  `OpenMeteoWeatherProvider()` in `app.py`, not driven by this field. Setting either has no
+  effect. Left as dead config rather than wired up (out of scope for an integration-hardening
+  pass) or documented in `.env.example` as if functional (which would be misleading);
+  flagged here so nobody spends time debugging why setting them changes nothing.
+
+
 - The rate limiter is a per-process, in-memory singleton. This deployment relies on running
   exactly **one** Uvicorn worker (`Dockerfile`'s `--workers 1`) as a hard invariant: a
   multi-worker/multi-replica deployment would silently give each worker its own disjoint
@@ -158,10 +169,13 @@ live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be r
   with `reason=call_requires_confirmation_use_conversation_endpoint`. Placing a call now
   requires the conversational path (`POST /v1/conversation`) on every path through this
   codebase, not just the newer one. Every other `/v1/command` action is unaffected.
-- There is no HTTP endpoint to disable a patient. `users.active` exists in the schema and is
-  enforced on every patient-scoped route, but flipping it requires direct, trusted access to
-  the VoiceBot's database (or a future backend-owned admin endpoint, not yet built) — it is
-  never reachable by an ordinary patient-scoped API key.
+- **Patient revocation** is reachable through `POST /v1/memory/sync`'s optional `active`
+  field (`true`/`false`/omitted-to-leave-unchanged) — no separate admin endpoint was added.
+  This route is deliberately not gated on the patient's current `active` state (unlike
+  conversation/voice/welcome), specifically so a disabled patient can be re-enabled: gating
+  it would make the very re-enable request get rejected as coming from a disabled patient.
+  Sync's other effects (family/medicine/routine replacement) still happen normally even for
+  a disabled patient — this is the data-management channel, not a patient-facing one.
 - Prompt-injection detection is pattern-based. It is a defence in depth, not the primary
   control — the primary control is that the model cannot execute anything.
 - No penetration test has been performed against a deployed instance.

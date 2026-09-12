@@ -92,8 +92,19 @@ STATIC_LIMITATIONS: dict[str, list[str]] = {
     'mni': ['No documented cloud TTS.', 'LLM generation quality not measured.',
             'Command pack ships with no phrases, so the command router fails closed.'],
     'npi': ['No documented cloud TTS.'],
-    'kha': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.'],
-    'lus': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.'],
+    # The 'LLM generation quality not measured' line matters precisely:
+    # LLM_LANGUAGES (the llm_support flag above) is a reporting-only
+    # allowlist -- nothing in the conversation pipeline actually refuses a
+    # turn in this language (the system prompt names it correctly; see
+    # tests/unit/test_target_language_mappings.py). A user CAN talk to the
+    # assistant in this language today; the honest gap is that nobody has
+    # measured whether the model's output is any good, not that no path
+    # exists -- this line exists so a caller reading known_limitations
+    # gets that nuance rather than assuming a hard refusal.
+    'kha': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.',
+           'LLM generation quality not measured.'],
+    'lus': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.',
+           'LLM generation quality not measured.'],
     'grt': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.'],
     'trp': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.'],
     'nag': ['No cloud ASR or TTS. Local NE-ASR model is benchmark-only.'],

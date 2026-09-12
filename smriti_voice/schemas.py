@@ -418,6 +418,14 @@ class MemorySyncRequest(BaseModel):
     external_id: str | None = Field(default=None, max_length=128)
     timezone: str | None = Field(default=None, max_length=64)
     language_code: str | None = Field(default=None, max_length=16)
+    # Revocation, through the existing sync path -- no separate admin
+    # endpoint. None (the default) leaves the patient's current active
+    # state untouched; explicitly sending false disables every
+    # patient-scoped endpoint for this user_id (see
+    # api/dependencies.py::ensure_patient_active) without touching API-key
+    # authorization, which remains a separate, backend-owned concern.
+    # Sending true re-enables a previously disabled patient.
+    active: bool | None = Field(default=None)
     # Opt-in revisioning (see MemoryRepository.sync_caregiver_memory). Omit
     # source_revision entirely to get the original unversioned behaviour:
     # every call applies unconditionally, exactly as before this field

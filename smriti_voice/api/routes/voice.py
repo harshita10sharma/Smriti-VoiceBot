@@ -78,6 +78,11 @@ async def conversation_voice(
         result = await run_in_threadpool(pipeline.process, path, user_id=user_id,
                                          session_id=session_id, language=language,
                                          request_id=rid, speak=speak)
+    except PermissionError as exc:
+        # A session id belonging to a different user.
+        if idem_key:
+            app.idempotency.abandon(user_id, idem_key)
+        raise HTTPException(403, 'This session does not belong to this user') from exc
     except Exception:
         if idem_key:
             app.idempotency.abandon(user_id, idem_key)

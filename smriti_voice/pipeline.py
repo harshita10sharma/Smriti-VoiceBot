@@ -82,11 +82,11 @@ class VoicePipeline:
             asr = self.app.asr.transcribe(wav_path, language or 'auto', request_id=rid)
         except Exception as exc:
             log.warning('asr_failed', fields={'request_id': rid, 'error': type(exc).__name__})
-            return self._error(rid, session_id, language or 'eng', 'ASR_UNAVAILABLE',
+            return self._error(rid, session_id, user_id, language or 'eng', 'ASR_UNAVAILABLE',
                                started)
 
         if not asr.transcript.strip():
-            return self._error(rid, session_id, language or 'eng', 'NO_SPEECH_DETECTED',
+            return self._error(rid, session_id, user_id, language or 'eng', 'NO_SPEECH_DETECTED',
                                started, asr_provider=asr.provider,
                                asr_latency_ms=asr.latency_ms)
 
@@ -134,8 +134,8 @@ class VoicePipeline:
             audio_unavailable_reason=audio_reason,
             tts_provider=None)
 
-    def _error(self, request_id: str, session_id: str | None, language: str, code: str,
-               started: float, *, asr_provider: str | None = None,
+    def _error(self, request_id: str, session_id: str | None, user_id: str, language: str,
+               code: str, started: float, *, asr_provider: str | None = None,
                asr_latency_ms: int = 0) -> VoiceResponse:
         from .schemas import TurnMetadata
         texts = {
@@ -150,11 +150,27 @@ class VoicePipeline:
                 'asm': 'মই একো শুনা নাই। অনুগ্ৰহ কৰি আকৌ কওক।',
                 'ben': 'আমি কিছু শুনতে পাইনি। অনুগ্রহ করে আবার বলুন।'},
         }[code]
+        # Every other response path (welcome/conversation/a successful voice
+        # turn) always returns a real, PERSISTED session_id -- SessionStore
+        # .get_or_create both mints one and writes it to the database
+        # (see conversation/context.py) whenever the caller didn't supply
+        # one, or reuses/validates the caller's if it did. This ASR-failure
+        # path runs before conversation.handle() is ever called, so it must
+        # do that same reservation itself -- a raw uuid string that was
+        # never written anywhere would be worse than it looks: the NEXT
+        # request using it would find no matching row and silently be
+        # handed yet another, different, unrelated session_id by
+        # get_or_create's own fallback (it mints a fresh one whenever the
+        # supplied id doesn't exist), defeating the whole point of handing
+        # the client an id to continue under. Reserving it here the same
+        # way welcome() does means it is genuinely continuable.
+        session = self.app.conversation.sessions.get_or_create(session_id, user_id, language)
+        resolved_session_id = session.session_id
         return VoiceResponse(
-            request_id=request_id, session_id=session_id or '', language=language,
+            request_id=request_id, session_id=resolved_session_id, language=language,
             response_text=texts.get(language, texts['eng']), kind=TurnKind.ERROR,
             transcript='', audio_available=False, audio_unavailable_reason=code,
-            metadata=TurnMetadata(request_id=request_id, session_id=session_id or '',
+            metadata=TurnMetadata(request_id=request_id, session_id=resolved_session_id,
                                   kind=TurnKind.ERROR, execution_mode=ExecutionMode.ERROR,
                                   asr_provider=asr_provider, asr_latency_ms=asr_latency_ms,
                                   error_code=code,

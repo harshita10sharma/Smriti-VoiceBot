@@ -152,6 +152,26 @@ def test_backend_key_job_ownership_respects_the_allow_list(backend_client, two_u
     assert response.json()['job_id'] == job_id
 
 
+def test_voice_endpoint_returns_403_not_500_for_a_cross_patient_session_id(backend_client):
+    """A session created for one authorized patient must not be usable by a
+    different authorized patient on the voice endpoint -- and the rejection
+    must be a clean 403, matching the text /v1/conversation endpoint,
+    rather than an unhandled PermissionError surfacing as a 500."""
+    from smriti_voice.tts.mock import silent_wav
+
+    created = backend_client.post(
+        '/v1/conversation', headers={'x-api-key': 'backend-key'},
+        json={'user_id': 'demo-user', 'message': 'hello'})
+    assert created.status_code == 200
+    session_id = created.json()['session_id']
+
+    response = backend_client.post(
+        '/v1/conversation/voice', headers={'x-api-key': 'backend-key'},
+        data={'user_id': 'other-user', 'session_id': session_id},
+        files={'audio_wav': ('a.wav', silent_wav(0.4), 'audio/wav')})
+    assert response.status_code == 403
+
+
 def test_backend_key_missing_is_rejected(backend_client):
     response = backend_client.post(
         '/v1/conversation', json={'user_id': 'demo-user', 'message': 'help'})

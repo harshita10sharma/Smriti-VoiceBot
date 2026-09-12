@@ -200,9 +200,13 @@ live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be r
   next unrelated write) — verified in `tests/integration/test_voice_job_reliability.py`.
 - **Backup/restore**: the entire durable state is the single SQLite file at `SMRITI_DB_PATH`
   plus the audio cache directory (`SMRITI_AUDIO_CACHE_DIR`, safely disposable — it is a
-  regenerable cache with its own retention policy, not source data). Stopping the process and
-  copying that one file is a consistent backup; there is no separate backup tooling in this
-  repository today.
+  regenerable cache with its own retention policy, not source data). `tools/backup_db.py`
+  (`backup`/`restore`/`verify` subcommands) uses SQLite's own online-backup API, so it is
+  safe to run against a live, actively-written-to database — it never produces a torn/
+  partial copy the way a raw file copy could. `restore` always preserves whatever database
+  was already at the destination (as a `.pre-restore` sibling file) before overwriting it,
+  and both `backup` and `restore` run an integrity check + schema-version report on the
+  result automatically.
 - **Staging vs. production**: `SMRITI_ENV` (see the fail-closed-auth section above) is the
   only environment-mode distinction that exists in code today; there is no separate
   staging-vs-production config profile beyond environment variables the operator sets per

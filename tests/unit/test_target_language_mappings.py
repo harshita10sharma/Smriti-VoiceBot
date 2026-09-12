@@ -85,6 +85,35 @@ def test_meiteilon_has_validated_local_asr_pack_status():
     assert packs['mni'].status == 'validated_local'
 
 
+def test_llm_conversation_is_not_actually_blocked_for_unlisted_languages(app):
+    """The real contradiction check (integration batch 4, Phase 15): does
+    the capability registry's llm_support=false for kha/lus/mni actually
+    mean the conversation pipeline refuses to try? No -- LLM_LANGUAGES is
+    consumed only by language/capabilities.py's reporting matrix (verified
+    by grep: it has exactly one other reference, in __init__.py's
+    re-export). Nothing in conversation/manager.py or llm/router.py checks
+    it. The system prompt correctly names all three languages
+    (conversation/prompts.py's LANGUAGE_NAMES), so an actual attempt goes
+    through the LLM, unblocked -- its quality/correctness has simply never
+    been measured, which is a different, honest thing to report than "no
+    path exists". This is not a bug: the registry is a deliberately
+    conservative reporting surface, not an execution gate, and this test
+    exists so a future change can't quietly turn it into one (or silently
+    assume one already exists) without that being a deliberate decision."""
+    from smriti_voice.llm.mock import MockLLMProvider
+    from smriti_voice.schemas import TurnKind
+
+    for language, name_fragment in (('kha', 'Khasi'), ('lus', 'Mizo'),
+                                    ('mni', 'Manipuri')):
+        provider = MockLLMProvider(reply=f'a reply in {language}')
+        app.llm._cache['mock'] = provider
+        reply = app.conversation.handle(user_id='demo-user', message='hello',
+                                        language=language)
+        assert reply.kind is TurnKind.CONVERSATION
+        assert len(provider.calls) == 1  # the LLM was actually called, not skipped
+        assert name_fragment in provider.calls[-1]['system']
+
+
 def test_no_language_reports_supported_without_a_measured_validation_record():
     """Restates the existing, already-enforced rule (language/capabilities.py)
     for the three specific target languages this audit is about: adapter

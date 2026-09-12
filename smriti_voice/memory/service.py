@@ -61,6 +61,27 @@ class MemoryService:
     def now(self) -> datetime:
         return datetime.now(self.tz)
 
+    def _tz_for(self, user_id: str) -> ZoneInfo:
+        """The patient's own stored IANA timezone (see users.timezone,
+        synced via POST /v1/memory/sync), not the single service-wide
+        default. Falls back to the service default for a user with no row,
+        an empty timezone, or an invalid/unrecognized IANA name -- a typo
+        in synced data must never crash a query, only silently fall back."""
+        user = self.repo.get_user(user_id)
+        if user and user.timezone:
+            try:
+                return ZoneInfo(user.timezone)
+            except Exception:
+                pass
+        return self.tz
+
+    def _today_for(self, user_id: str) -> date:
+        """'Today' resolved in the patient's own timezone -- what decides
+        whether a medicine's days_of_week or an appointment's date matches
+        "tonight"/"tomorrow" for *this* patient, not for whichever
+        timezone the service process happens to be configured with."""
+        return datetime.now(self._tz_for(user_id)).date()
+
     # ------------------------------------------------------------------ #
     # Family
     # ------------------------------------------------------------------ #
@@ -108,7 +129,7 @@ class MemoryService:
     # Meals, medicine, schedule
     # ------------------------------------------------------------------ #
     def meals(self, user_id: str, when: str | None = 'today') -> dict:
-        resolved = resolve_date(when, today=self.today())
+        resolved = resolve_date(when, today=self._today_for(user_id))
         meals = self.repo.meals_on(user_id, resolved.value)
         return {
             'date': resolved.value.isoformat(),
@@ -139,7 +160,7 @@ class MemoryService:
         given.
         """
         medicines = self.repo.list_medicines(user_id, time_of_day=time_of_day)
-        resolved = resolve_date(when, today=self.today()) if when else None
+        resolved = resolve_date(when, today=self._today_for(user_id)) if when else None
         iso_weekday = str(resolved.value.isoweekday()) if resolved else None
 
         def _matches_day(m) -> bool:
@@ -172,7 +193,7 @@ class MemoryService:
         }
 
     def schedule(self, user_id: str, when: str | None = 'today') -> dict:
-        resolved = resolve_date(when, today=self.today())
+        resolved = resolve_date(when, today=self._today_for(user_id))
         weekday = resolved.value.strftime('%A').lower()
         routines = self.repo.list_routine(user_id, day_of_week=weekday)
         appointments = self.repo.appointments_on(user_id, resolved.value)
@@ -193,7 +214,7 @@ class MemoryService:
         }
 
     def appointments(self, user_id: str, when: str | None = 'today', days: int = 0) -> dict:
-        resolved = resolve_date(when, today=self.today())
+        resolved = resolve_date(when, today=self._today_for(user_id))
         items = (self.repo.upcoming_appointments(user_id, resolved.value, days) if days
                  else self.repo.appointments_on(user_id, resolved.value))
         return {
@@ -206,7 +227,7 @@ class MemoryService:
         }
 
     def visitors(self, user_id: str, when: str | None = 'today') -> dict:
-        resolved = resolve_date(when, today=self.today())
+        resolved = resolve_date(when, today=self._today_for(user_id))
         items = self.repo.visitors_on(user_id, resolved.value)
         return {'date': resolved.value.isoformat(),
                 'visitors': [{'name': v.name, 'relation': v.relation, 'time': v.visit_time,

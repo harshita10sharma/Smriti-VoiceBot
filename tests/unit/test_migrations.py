@@ -13,8 +13,8 @@ import sqlite3
 from smriti_voice.database.migrations import MIGRATIONS, SCHEMA_VERSION, migrate
 
 
-def test_schema_version_is_five_after_this_change():
-    assert SCHEMA_VERSION == len(MIGRATIONS) == 5
+def test_schema_version_is_six_after_this_change():
+    assert SCHEMA_VERSION == len(MIGRATIONS) == 6
 
 
 def test_migrating_a_fresh_database_reaches_current_version():

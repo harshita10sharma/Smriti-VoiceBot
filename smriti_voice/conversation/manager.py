@@ -205,7 +205,7 @@ class ConversationManager:
         self.responder = DeterministicResponder(registry)
         self.gate = SafeActionGate()
         self.sessions = sessions or SessionStore(
-            max_turns=config.max_history_turns,
+            memory.repo, max_turns=config.max_history_turns,
             idle_timeout_minutes=config.max_session_idle_minutes)
         self.weather = weather
         self.offline_manager = offline_manager
@@ -261,6 +261,10 @@ class ConversationManager:
             error_code=outcome.error_code, topic=outcome.topic)
 
         self._persist(session, message, outcome, metadata)
+        # Persist pending confirmation / last-subject / language so a
+        # restart mid-conversation reloads exactly this state, not an
+        # earlier one -- see SessionStore.save.
+        self.sessions.save(session)
 
         return ConversationResponse(
             request_id=rid, session_id=session.session_id, response_text=outcome.text,
@@ -290,6 +294,7 @@ class ConversationManager:
         restored = existed_before and session.session_id == session_id
         turn_language = language or session.language or 'eng'
         session.language = turn_language
+        self.sessions.save(session)  # persist a language change, if any
         user = self.memory.repo.get_user(user_id)
         text = _welcome_text(turn_language, user.display_name if user else None)
         return WelcomeOutcome(session_id=session.session_id, text=text,

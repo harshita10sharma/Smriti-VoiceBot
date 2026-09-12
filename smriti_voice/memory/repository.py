@@ -458,6 +458,48 @@ class MemoryRepository:
                        language=excluded.language, last_active_at=datetime('now')""",
                 (session_id, user_id, language))
 
+    def get_session(self, session_id: str) -> sqlite3.Row | None:
+        with self.db.connect() as connection:
+            return connection.execute(
+                'SELECT * FROM conversations WHERE session_id = ?', (session_id,)).fetchone()
+
+    def save_session_state(self, session_id: str, user_id: str, language: str, *,
+                           pending_json: str | None, last_subject: str | None) -> None:
+        """Persist the two pieces of live session state that used to live
+        purely in the in-memory SessionStore: the pending confirmation (as
+        JSON, or None when nothing is pending -- an explicit None here
+        clears a previously-pending confirmation, it does not leave a
+        stale one in place) and the last-mentioned subject for pronoun
+        resolution. Called once per turn after routing decides the
+        outcome, so a restart mid-conversation never loses or corrupts
+        this state."""
+        with self.db.connect() as connection:
+            # A conversation may start before any caregiver sync or explicit
+            # provisioning call for this user_id -- conversations.user_id
+            # has a foreign key on users(user_id), so without this the very
+            # first turn for a brand-new (but already authorized -- the
+            # route checked that before ever reaching here) user_id would
+            # fail. This is provisioning only, never authorization.
+            connection.execute(
+                """INSERT INTO users (user_id, display_name)
+                   VALUES (?, ?)
+                   ON CONFLICT(user_id) DO NOTHING""",
+                (user_id, user_id))
+            connection.execute(
+                """INSERT INTO conversations (session_id, user_id, language, pending_json,
+                                              last_subject)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(session_id) DO UPDATE SET
+                       language = excluded.language,
+                       pending_json = excluded.pending_json,
+                       last_subject = excluded.last_subject,
+                       last_active_at = datetime('now')""",
+                (session_id, user_id, language, pending_json, last_subject))
+
+    def delete_session(self, session_id: str) -> None:
+        with self.db.connect() as connection:
+            connection.execute('DELETE FROM conversations WHERE session_id = ?', (session_id,))
+
     def add_turn(self, *, turn_id: str, session_id: str, user_id: str, role: str,
                  text: str, language: str, kind: str) -> None:
         with self.db.connect() as connection:

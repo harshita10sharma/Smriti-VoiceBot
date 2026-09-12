@@ -10,6 +10,17 @@ from .intent_semantic import SemanticIntent
 from .lid import NELID, LIDError
 from .telemetry import Telemetry
 
+# /v1/command is a single-shot legacy endpoint: no session, no user_id, and
+# therefore no way to ask "shall I call them now?" and wait for a spoken
+# yes -- that confirmation state machine only exists on the conversational
+# path (POST /v1/conversation, see conversation/manager.py's
+# PendingConfirmation). A call action must never execute without an
+# explicit confirmation, so this endpoint recognizes the intent (the
+# `action` field still reports it) but never authorizes it -- `accepted`
+# stays False, exactly the same signal a client already checks before
+# executing anything (see HANDOFF.md: "execute only when accepted=true").
+CALL_ACTIONS = {Action.CALL_BINA.value, Action.CALL_PRIMARY_CONTACT.value}
+
 @dataclass(frozen=True)
 class TurnResult:
     request_id:str; transcript:str; language:str; language_confidence:float; intent:str; action:str; accepted:bool; confidence:float; reason:str; latency_ms:int; offline:bool; provider:str="none"
@@ -116,7 +127,11 @@ class VoiceEngine:
                 if ok: transcript=f'{transcript} | semantic_en={en}'
             except Exception: pass
         req=self.gate.authorize(action,intent) if ok else self.gate.authorize('NO_ACTION','UNKNOWN')
-        accepted=ok and req.action!=Action.NO_ACTION
+        if req.action.value in CALL_ACTIONS:
+            accepted=False
+            reason='call_requires_confirmation_use_conversation_endpoint'
+        else:
+            accepted=ok and req.action!=Action.NO_ACTION
         result=self._result(rid,transcript,lang,prob,intent,req.action.value,accepted,conf,reason,t,offline,provider)
         self.telemetry.log(request_id=rid,language=result.language,intent=result.intent,action=result.action,accepted=accepted,confidence=result.confidence,latency_ms=result.latency_ms,provider=provider,offline=offline)
         return result

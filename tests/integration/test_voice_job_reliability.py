@@ -13,6 +13,7 @@ non-crashed case.
 from __future__ import annotations
 
 from smriti_voice.voice_jobs import FAILED, PROCESSING, QUEUED, VoiceJobRepository, VoiceJobWorker
+from smriti_voice.tts.router import AudioStore
 
 
 def test_submit_beyond_queue_capacity_fails_the_job_cleanly(app):
@@ -70,3 +71,39 @@ def test_recover_stale_jobs_never_touches_terminal_jobs(app):
     job = repo.get(done)
     assert job.status == 'completed'
     assert job.audio_id == 'abc123'  # untouched
+
+
+# --------------------------------------------------------------------------- #
+# Independent re-audit (integration-hardening phase 6): expired audio must
+# not be retrievable even if prune() -- which only runs opportunistically on
+# the next write -- has not run since the file aged out.
+# --------------------------------------------------------------------------- #
+def test_expired_audio_is_not_retrievable_even_without_a_new_write(tmp_path):
+    import os
+    import time
+
+    store = AudioStore(tmp_path, retention_minutes=1)  # clamped to 60s minimum internally
+    audio_id = store.put(b'RIFF....WAVEfmt ' + b'\x00' * 20)
+    path = store.directory / f'{audio_id}.wav'
+    assert path.is_file()
+
+    # Age the file past the retention window without triggering prune() via
+    # another write -- exactly the scenario prune()'s opportunistic design
+    # does not cover on its own.
+    old = time.time() - store.retention_s - 5
+    os.utime(path, (old, old))
+
+    assert store.path_for(audio_id) is None
+    assert not path.exists()  # also cleaned up, not just refused
+
+
+def test_fresh_audio_within_retention_is_still_retrievable(tmp_path):
+    store = AudioStore(tmp_path, retention_minutes=15)
+    audio_id = store.put(b'RIFF....WAVEfmt ' + b'\x00' * 20)
+    assert store.path_for(audio_id) is not None
+
+
+def test_path_for_rejects_non_hex_audio_id_without_touching_disk(tmp_path):
+    store = AudioStore(tmp_path, retention_minutes=15)
+    assert store.path_for('../../etc/passwd') is None
+    assert store.path_for('') is None

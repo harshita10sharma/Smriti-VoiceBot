@@ -2,6 +2,8 @@
 import json, os
 from dotenv import load_dotenv
 
+from .exceptions import ConfigurationError
+
 load_dotenv(override=False)
 from dataclasses import dataclass
 from pathlib import Path
@@ -158,6 +160,7 @@ class AppConfig:
     default_latitude: float
     default_longitude: float
     offline_forced: bool
+    environment: str
     allow_unauthenticated: bool
     api_key_env: str
     rate_limit_per_minute: int
@@ -170,6 +173,31 @@ class AppConfig:
     def load(cls, settings: Settings | None = None) -> 'AppConfig':
         s = settings or Settings.load()
         from . import __version__
+
+        # Fail closed by default: an unset/misspelled SMRITI_ENV is treated
+        # as production, never as an implicit opt-in to relaxed behaviour.
+        environment = _env_str('SMRITI_ENV', 'production').lower() or 'production'
+        allow_unauthenticated = _env_bool('SMRITI_ALLOW_UNAUTHENTICATED', False)
+
+        # SMRITI_ALLOW_UNAUTHENTICATED is a real foot-gun (SECURITY.md): with
+        # no server key configured, it serves every protected route as
+        # 'anonymous' with no patient binding at all. It exists for local
+        # development only. Rather than let a single stray environment
+        # variable silently open a network-facing deployment, refuse to
+        # start at all unless the operator has also explicitly declared
+        # this a development environment -- two separate, deliberate
+        # opt-ins, not one. This never fires for the existing single-user
+        # deployment, which authenticates normally and never sets this flag.
+        if allow_unauthenticated and environment != 'development':
+            raise ConfigurationError(
+                'SMRITI_ALLOW_UNAUTHENTICATED=1 is set but SMRITI_ENV is '
+                f'{environment!r}, not "development". Refusing to start: this '
+                'combination would serve every protected route unauthenticated '
+                'on what is being treated as a network-facing deployment. Set '
+                'SMRITI_ENV=development to run unauthenticated locally, or '
+                'unset SMRITI_ALLOW_UNAUTHENTICATED.',
+                code='UNSAFE_AUTH_CONFIGURATION')
+
         return cls(
             settings=s,
             providers=ProviderConfig.from_env(),
@@ -182,7 +210,8 @@ class AppConfig:
             default_latitude=_env_float('SMRITI_DEFAULT_LATITUDE', 26.1445),
             default_longitude=_env_float('SMRITI_DEFAULT_LONGITUDE', 91.7362),
             offline_forced=_env_bool('SMRITI_FORCE_OFFLINE', False),
-            allow_unauthenticated=_env_bool('SMRITI_ALLOW_UNAUTHENTICATED', False),
+            environment=environment,
+            allow_unauthenticated=allow_unauthenticated,
             api_key_env=s.api_key_env,
             rate_limit_per_minute=_env_int('SMRITI_RATE_LIMIT_PER_MINUTE', 60),
             max_upload_bytes=s.max_upload_bytes,

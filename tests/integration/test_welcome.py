@@ -124,3 +124,39 @@ def test_welcome_endpoint_rejects_unauthorized_user(client, auth_headers):
 def test_welcome_endpoint_requires_auth(client):
     resp = client.post('/v1/conversation/welcome', json={'user_id': 'demo-user'})
     assert resp.status_code == 401
+
+
+def test_welcome_speak_true_with_unsupported_tts_language_does_not_claim_success(
+        app, client, auth_headers, monkeypatch):
+    """Independent verification (integration-hardening phase 5): a welcome
+    request for a language no configured TTS provider supports must not
+    falsely claim audio will play. response_text is still delivered
+    immediately regardless -- the text answer never depends on TTS."""
+    import time
+
+    monkeypatch.setenv('SMRITI_TTS_PROVIDER', 'auto')
+    monkeypatch.setenv('SARVAM_API_KEY', 'present-but-never-called')
+    monkeypatch.setenv('SMRITI_INDIC_PARLER_ENABLED', '0')
+    from smriti_voice.config import AppConfig
+    from smriti_voice.tts.router import TTSRouter
+    app.tts = TTSRouter(AppConfig.load(), app.languages)
+
+    resp = client.post('/v1/conversation/welcome',
+                       json={'user_id': 'demo-user', 'language': 'asm', 'speak': True},
+                       headers=auth_headers)
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body['response_text']  # text present immediately regardless of TTS
+    assert body['job_id'] is not None
+    assert body['job_status'] == 'QUEUED'  # honest: still processing, not falsely 'completed'
+    assert body['audio_available'] is False
+
+    deadline = time.monotonic() + 2.0
+    job = None
+    while time.monotonic() < deadline:
+        job = app.voice_jobs.get(body['job_id'])
+        if job and job.status in ('completed', 'failed'):
+            break
+        time.sleep(0.01)
+    assert job is not None and job.status == 'failed'
+    assert job.error_code == 'NO_TTS_PROVIDER_SUPPORTS_LANGUAGE'

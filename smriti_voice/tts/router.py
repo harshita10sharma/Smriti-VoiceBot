@@ -50,7 +50,21 @@ class AudioStore:
         if not audio_id or not all(ch in '0123456789abcdef' for ch in audio_id):
             return None
         path = self.directory / f'{audio_id}.wav'
-        return path if path.is_file() else None
+        if not path.is_file():
+            return None
+        # prune() only runs opportunistically on the next write (see class
+        # docstring), so a file past its retention window can otherwise sit
+        # on disk, fully retrievable, indefinitely if no new audio is ever
+        # synthesized afterward. Enforce the same cutoff at read time too,
+        # so "expired" is true the moment it's claimed, not only whenever
+        # the next unrelated write happens to clean it up.
+        try:
+            if path.stat().st_mtime < time.time() - self.retention_s:
+                path.unlink(missing_ok=True)
+                return None
+        except OSError:
+            return None
+        return path
 
     def prune(self) -> int:
         if not self.directory.exists():

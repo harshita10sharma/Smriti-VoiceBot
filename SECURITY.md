@@ -93,6 +93,12 @@ endpoint, the service returns **503**, not open access. The legacy command endpo
 remains API-key-only because it does not access personal data.
 `SMRITI_ALLOW_UNAUTHENTICATED=1` exists for local development only and logs a warning at
 startup naming the risk; it does not disable identity binding on personal endpoints.
+Since the integration-hardening changes in this document's revision, setting it also
+requires `SMRITI_ENV=development` — the application refuses to start at all
+(`ConfigurationError`, code `UNSAFE_AUTH_CONFIGURATION`) if `SMRITI_ALLOW_UNAUTHENTICATED=1`
+is set while `SMRITI_ENV` is unset or anything other than `development`. `SMRITI_ENV`
+defaults to `production` when unset, so the fail-safe is the default, not something an
+operator has to remember to configure.
 
 **Audio ownership**: `GET /v1/audio/{audio_id}` resolves the requested id back to the
 voice job that generated it and checks that job's owner against the caller's authorized
@@ -117,10 +123,38 @@ live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be r
 
 ## Known limitations
 
-- The rate limiter is per-process and in-memory; a multi-worker deployment needs a shared store.
-- Sessions are in-memory, so a restart drops pending confirmations (fail-safe: they are lost,
-  never auto-confirmed).
-- `SMRITI_ALLOW_UNAUTHENTICATED=1` is a real foot-gun if set in production.
+- The rate limiter and the session store are both per-process, in-memory singletons. This
+  deployment relies on running exactly **one** Uvicorn worker (`Dockerfile`'s `--workers 1`)
+  as a hard invariant: a multi-worker/multi-replica deployment would silently give each
+  worker its own disjoint sessions and rate-limit budget, with no error raised. A running
+  process cannot reliably detect its own sibling workers (they share no memory and signal
+  nothing to each other), so this is **not** fully enforced — it is a best-effort,
+  clearly-labeled guard: `tools/validate_config.py` fails hard (exit 1) if `WEB_CONCURRENCY`
+  or `UVICORN_WORKERS` indicates more than one worker, and the API logs a loud
+  `unsafe_multi_worker_configuration_detected` error at startup for the same signal. Neither
+  check can catch every way of accidentally starting more than one worker (e.g. a bare
+  `uvicorn ... --workers 4` with no env var set at all) — the actual safety comes from the
+  Dockerfile hardcoding `--workers 1`, not from runtime detection.
+- Sessions are in-memory, so a restart drops every session and every pending confirmation.
+  This is the deliberately safer failure mode: a lost confirmation can never be silently
+  auto-resolved, and a session id from before the restart is simply unknown afterward (never
+  reassigned to a different patient) — the next request for that patient just gets a fresh
+  session. Nothing currently persists this across a restart; this is a deliberate choice,
+  not an oversight, pending a decision on whether a backend integration actually requires
+  session continuity across a restart.
+- `SMRITI_ALLOW_UNAUTHENTICATED=1` is a real foot-gun if set in production; the application
+  now refuses to start in that combination unless `SMRITI_ENV=development` is also set.
+- `POST /v1/command` (the preserved v4.1 endpoint) has **no `user_id`/patient-ownership
+  concept at all** — any key valid for any patient can drive it — and its call-action path
+  (`engine.py`'s `SemanticIntent`) does **not** have the same confirmation gate as the
+  conversational path (`ConversationManager`): a call action there executes without a
+  two-step yes/no. This is unchanged from v4.1 by design (its contract is frozen for
+  existing clients) and is a known, documented gap, not something this revision claims to
+  have fixed.
+- There is no HTTP endpoint to disable a patient. `users.active` exists in the schema and is
+  enforced on every patient-scoped route, but flipping it requires direct, trusted access to
+  the VoiceBot's database (or a future backend-owned admin endpoint, not yet built) — it is
+  never reachable by an ordinary patient-scoped API key.
 - Prompt-injection detection is pattern-based. It is a defence in depth, not the primary
   control — the primary control is that the model cannot execute anything.
 - No penetration test has been performed against a deployed instance.

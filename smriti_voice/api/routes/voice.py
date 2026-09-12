@@ -40,6 +40,14 @@ async def conversation_voice(
     authorized: frozenset = Depends(authorized_user_ids),
     idem_key: str | None = Depends(idempotency_key),
 ) -> VoiceResponse:
+    """One voice turn: WAV in, ASR + conversation run synchronously and
+    ``response_text`` returns immediately, but TTS is asynchronous --
+    ``job_id``/``job_status`` are returned instead of audio. Poll
+    ``GET /v1/voice/jobs/{job_id}`` until it is no longer
+    queued/processing, then ``GET /v1/audio/{audio_id}`` once. Same
+    ownership and optional ``Idempotency-Key`` behavior as
+    ``POST /v1/conversation`` (idempotency is keyed on the exact audio
+    bytes plus ``user_id``/``session_id``/``language``/``speak``)."""
     if user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     ensure_patient_active(app, user_id)

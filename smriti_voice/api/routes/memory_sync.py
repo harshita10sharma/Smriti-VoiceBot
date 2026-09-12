@@ -37,6 +37,17 @@ def memory_sync(
     app: Application = Depends(application),
     authorized: frozenset = Depends(authorized_user_ids),
 ) -> MemorySyncResponse:
+    """Full-snapshot, atomic replace of this patient's caregiver-sourced
+    family/medicine/routine rows -- per category, an empty array clears
+    that category's caregiver-sourced rows, a non-empty array replaces
+    them, and rows from any other source (the patient's own words, an
+    assistant note, seed/import data) are never touched. Auto-provisions
+    the patient (idempotent, never overwrites an existing display name) if
+    this is the first contact for that ``user_id``. There is currently no
+    revision/version field on this request -- every call is a full,
+    unconditional replace; see the integration-readiness notes for why
+    that is deliberate pending a backend contract decision, not an
+    oversight."""
     if payload.user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     ensure_patient_active(app, payload.user_id)

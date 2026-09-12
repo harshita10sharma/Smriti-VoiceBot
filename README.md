@@ -12,6 +12,12 @@ v5 is an **extension of v4.1, not a replacement.** The v4.1 command router still
 first on every turn and still has final authority over actions. See `AUDIT.md` for the
 migration record.
 
+**Integrating with the Backend or Flutter team?** Start with `INTEGRATION_CONTRACT.md` —
+the single authoritative API/ownership contract, verified against this codebase's actual
+behavior (endpoints, error codes, voice-job lifecycle, memory-sync semantics, action
+proposal rules, and what is explicitly NOT implemented here). `HANDOFF.md` and
+`SECURITY.md` remain the detailed references it points into.
+
 ---
 
 ## What actually works today

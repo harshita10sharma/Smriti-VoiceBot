@@ -19,6 +19,8 @@ detection — see MemoryRepository.sync_caregiver_memory and SyncOutcome.
 """
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...app import Application
@@ -106,6 +108,22 @@ def memory_sync(
             language_code=payload.language_code,
             source_revision=payload.source_revision, schema_version=payload.schema_version,
             content_hash=_content_hash(payload) if payload.source_revision is not None else None)
+    except sqlite3.IntegrityError as exc:
+        # The most likely real-world cause: `external_id` (patient, or a
+        # family member/medicine/routine within this sync) is already
+        # assigned to a *different* user_id -- users.external_id and each
+        # per-table (user_id, external_id) pair are uniqueness-constrained
+        # at the database level (see database/migrations.py, migration 5).
+        # This is a genuine, foreseeable operational scenario (a backend
+        # bug or data-migration mistake reusing an id), not an internal
+        # error -- report it as a clear conflict, not an opaque 500.
+        log.warning('memory_sync_external_id_conflict',
+                   fields={'user_id': payload.user_id, 'error': str(exc)})
+        raise HTTPException(
+            409, 'One or more external_id values in this request are already assigned to a '
+                'different patient or record. External ids must be unique per patient '
+                '(family/medicine/routine) or globally (the patient external_id itself).'
+        ) from exc
     except Exception as exc:
         log.error('memory_sync_failed', fields={'user_id': payload.user_id,
                                                  'error': type(exc).__name__})

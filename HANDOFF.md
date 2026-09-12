@@ -191,20 +191,37 @@ Rejections: empty payload → **400**; not a valid/parseable WAV, or wrong conte
 
 | Product code | Internal code | ASR | LLM conversation | Deterministic fallback | TTS | Real validation evidence |
 |---|---|---|---|---|---|---|
-| `hi` | `hin` | Sarvam (online) + local (`validated_local` pack status) | yes | yes (eng/hin/asm/ben only) | Sarvam | none recorded in `config/language_validation.json` |
-| `as` | `asm` | Sarvam (online); local downgraded to `benchmark_only` (placeholder HF model, no real weights) | yes | yes | **no configured provider** | none recorded |
-| `mni` | `mni` | Sarvam (online) + local (`validated_local`) | **no** — not in the configured LLM-language set | **no** — no deterministic template for this language | **no configured provider** | none recorded |
-| `kha` | `kha` | Local NE-ASR only, `benchmark_only` (no cloud ASR at all) | **no** | **no** | **no configured provider** | none recorded |
-| `lus` | `lus` | Local NE-ASR only, `benchmark_only` | **no** | **no** | **no configured provider** | none recorded |
-| `en` | `eng` | Sarvam (online); local `benchmark_only` (uses generic Whisper, not IndicConformer) | yes | yes | Sarvam | none recorded |
+| `hi` | `hin` | Sarvam (online) + local (`validated_local` pack status) | reported `yes` | yes (eng/hin/asm/ben only) | Sarvam | none recorded in `config/language_validation.json` |
+| `as` | `asm` | Sarvam (online); local downgraded to `benchmark_only` (placeholder HF model, no real weights) | reported `yes` | yes | **no configured provider** | none recorded |
+| `mni` | `mni` | Sarvam (online) + local (`validated_local`) | reported `no`; **not actually blocked** — see note below | **no** — no deterministic template for this language | **no configured provider** | none recorded |
+| `kha` | `kha` | Local NE-ASR only, `benchmark_only` (no cloud ASR at all) | reported `no`; **not actually blocked** | **no** | **no configured provider** | none recorded |
+| `lus` | `lus` | Local NE-ASR only, `benchmark_only` | reported `no`; **not actually blocked** | **no** | **no configured provider** | none recorded |
+| `en` | `eng` | Sarvam (online); local `benchmark_only` (uses generic Whisper, not IndicConformer) | reported `yes` | yes | Sarvam | none recorded |
 
 **Read `GET /v1/languages` live, always** — this table is a snapshot for planning purposes,
 not something to hard-code. `config/language_validation.json`'s validated-language list is
 currently empty, so every language reports at most `BENCHMARK_ONLY`/`NOT_YET_TESTED`, never
 `SUPPORTED`, regardless of what this table says an adapter *could* do — adapter existence is
-never treated as proof it works. If your product plan depends on Meiteilon, Khasi or Mizo
-having a general conversational assistant (not just command navigation), that is a real,
-currently-unmet requirement in this codebase, not a configuration flag to flip.
+never treated as proof it works.
+
+**"LLM conversation: reported `no`" for `mni`/`kha`/`lus` needs a precise reading — verified,
+not assumed, against `conversation/manager.py`/`llm/router.py`: the capability matrix's
+`LLM_LANGUAGES` allowlist (`language/capabilities.py`) is consumed *only* by the
+`/v1/languages` reporting endpoint. Nothing in the actual conversation pipeline checks it —
+`ConversationManager._converse()` calls the configured LLM unconditionally, and the system
+prompt correctly names all three languages (`conversation/prompts.py`'s `LANGUAGE_NAMES`
+includes Manipuri/Khasi/Mizo). A real conversation turn in any of these three languages is
+**not technically blocked**; it reaches Groq/Qwen exactly like any other language and the
+model attempts to answer in it (verified:
+`test_llm_conversation_is_not_actually_blocked_for_unlisted_languages`). What's genuinely
+true is narrower and more honest than "no path exists": **nobody has measured whether that
+output is any good** for these three languages, so the capability matrix correctly declines
+to claim support — but if your product plan needs to know "can a user actually try talking
+to it in Khasi today," the answer is yes, with entirely unvalidated response quality, not
+"the system will refuse." Decide deliberately whether to (a) leave this as unvalidated/
+best-effort, (b) invest in measuring and validating quality for these languages, or (c) add
+an explicit block if unvalidated attempts are undesirable for your product — none of the
+three is implemented today; this is a decision, not a bug.
 
 ## Backend developer notes
 

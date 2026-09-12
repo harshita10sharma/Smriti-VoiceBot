@@ -29,6 +29,13 @@ class ResolvedDate:
     label: str
 
 
+def _format_minutes(minutes: int | None) -> str | None:
+    """0-1439 minutes-from-midnight -> 'HH:MM', or None if unset."""
+    if minutes is None:
+        return None
+    return f'{minutes // 60:02d}:{minutes % 60:02d}'
+
+
 def resolve_date(expression: str | None, *, today: date | None = None) -> ResolvedDate:
     """Turn 'yesterday' or '2026-09-03' into a date.  Unknown input → today."""
     reference = today or datetime.now(ZoneInfo(DEFAULT_TZ)).date()
@@ -84,6 +91,12 @@ class MemoryService:
             'relation': member.relation,
             'lives_in': member.lives_in,
             'notes': sanitise_untrusted(member.notes or ''),
+            'memory_prompt': sanitise_untrusted(member.memory_prompt or '') or None,
+            # Passed straight through -- never inferred from absence or from
+            # conversation. The system prompt instructs the model not to
+            # speak of a deceased person as available to call, visit or
+            # reply, based on this flag alone.
+            'is_deceased': member.is_deceased,
             'is_trusted_contact': member.is_trusted_contact,
             'is_primary_contact': member.is_primary_contact,
             'has_phone_number': bool(member.phone),
@@ -108,19 +121,54 @@ class MemoryService:
             'count': len(meals),
         }
 
-    def medicines(self, user_id: str, time_of_day: str | None = None) -> dict:
+    def medicines(self, user_id: str, time_of_day: str | None = None,
+                  *, when: str | None = None) -> dict:
+        """``when`` ('today'/'tomorrow'/an ISO date) filters by
+        ``days_of_week`` for medicines that have a structured schedule (see
+        MemorySyncMedicine). A medicine with no ``days_of_week`` set is
+        never filtered out by day -- exactly the old behaviour, for any
+        medicine synced before this field existed. Day resolution reuses
+        ``resolve_date`` (the same helper ``meals``/``schedule`` use), so
+        the "today/tomorrow" vocabulary is identical everywhere, not
+        reimplemented per tool.
+
+        This never infers whether a dose was actually taken -- there is no
+        adherence data source in this repository at all, so nothing here
+        could report it even if asked to; the system prompt separately
+        instructs the model never to claim adherence information it wasn't
+        given.
+        """
         medicines = self.repo.list_medicines(user_id, time_of_day=time_of_day)
+        resolved = resolve_date(when, today=self.today()) if when else None
+        iso_weekday = str(resolved.value.isoweekday()) if resolved else None
+
+        def _matches_day(m) -> bool:
+            if iso_weekday is None or not m.days_of_week:
+                return True  # no day filter requested, or medicine has no structured days
+            days = {d.strip() for d in m.days_of_week.split(',') if d.strip()}
+            return iso_weekday in days
+
+        filtered = [m for m in medicines if _matches_day(m)]
+
         return {
             'time_of_day': time_of_day,
+            'date': resolved.value.isoformat() if resolved else None,
+            'requested': resolved.label if resolved else None,
             'medicines': [{'name': m.name, 'dosage': m.dosage, 'schedule_time': m.schedule_time,
                            'time_of_day': m.time_of_day,
                            'instructions': sanitise_untrusted(m.instructions or ''),
                            'prescribed_by': m.prescribed_by,
+                           'external_id': m.external_id,
+                           'chosen_time': _format_minutes(m.chosen_time_min),
+                           'window_start': _format_minutes(m.window_start_min),
+                           'window_end': _format_minutes(m.window_end_min),
+                           'days_of_week': m.days_of_week,
                            'verification_status': m.provenance.verification_status}
-                          for m in medicines],
-            'count': len(medicines),
+                          for m in filtered],
+            'count': len(filtered),
             'read_only': True,
-            'note': 'Medication information is read-only. Changes require a caregiver or doctor.',
+            'note': 'Medication information is read-only. Changes require a caregiver or doctor. '
+                    'Whether a dose was actually taken is not tracked here -- say so honestly if asked.',
         }
 
     def schedule(self, user_id: str, when: str | None = 'today') -> dict:

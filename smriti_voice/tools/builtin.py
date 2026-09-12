@@ -137,7 +137,7 @@ def _get_today_schedule(principal: Principal, args: DateQuery,
 
 def _get_medication_schedule(principal: Principal, args: MedicationQuery,
                              context: ToolContext) -> dict[str, Any]:
-    return context.memory.medicines(principal.user_id, args.time_of_day)
+    return context.memory.medicines(principal.user_id, args.time_of_day, when=args.when)
 
 
 def _get_appointment(principal: Principal, args: AppointmentQuery,

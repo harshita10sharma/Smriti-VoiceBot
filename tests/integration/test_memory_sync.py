@@ -32,6 +32,9 @@ def test_successful_sync_reports_counts(client, auth_headers):
     assert body == {
         'success': True, 'user_id': 'demo-user',
         'family_members_synced': 1, 'medicines_synced': 1, 'daily_routines_synced': 1,
+        # Additive fields for the opt-in revisioning contract (unused here,
+        # since this request omits source_revision entirely).
+        'status': 'applied', 'source_revision': None,
     }
 
 
@@ -79,6 +82,7 @@ def test_empty_arrays_clear_the_caregiver_dataset(client, auth_headers, app):
     assert response.json() == {
         'success': True, 'user_id': 'demo-user',
         'family_members_synced': 0, 'medicines_synced': 0, 'daily_routines_synced': 0,
+        'status': 'applied', 'source_revision': None,
     }
     assert [f for f in app.memory.repo.list_family('demo-user')
            if f.provenance.created_by == 'memory_sync'] == []

@@ -41,6 +41,11 @@ class User(BaseModel):
     # config change). Defaults True so every existing/newly-created user is
     # unaffected unless something explicitly disables them.
     active: bool = True
+    # A stable reference the backend's own database assigns (e.g. a Supabase
+    # UUID), independent of this repository's own user_id primary key.
+    # Optional: nothing requires it, and it is never used for authorization.
+    external_id: str | None = None
+    timezone: str = 'Asia/Kolkata'
 
 
 class FamilyMember(BaseModel):
@@ -54,6 +59,11 @@ class FamilyMember(BaseModel):
     lives_in: str | None = None
     notes: str | None = None
     photo_path: str | None = None
+    external_id: str | None = None
+    memory_prompt: str | None = None
+    # Passed through to the model as context, never inferred from absence
+    # or from conversation -- see conversation/prompts.py.
+    is_deceased: bool = False
     provenance: Provenance = Field(default_factory=Provenance)
 
 
@@ -87,6 +97,15 @@ class Medicine(BaseModel):
     instructions: str | None = None
     active: bool = True
     prescribed_by: str | None = None
+    external_id: str | None = None
+    # Structured schedule, alongside the free-text fields above. All
+    # optional: a medicine with none of these set is matched only by the
+    # legacy time_of_day/schedule_time text, exactly as before this field
+    # set existed.
+    chosen_time_min: int | None = None          # 0-1439, minutes from midnight
+    window_start_min: int | None = None          # non-wrapping: start <= chosen <= end
+    window_end_min: int | None = None
+    days_of_week: str | None = None              # comma-separated ISO weekdays, Monday=1..Sunday=7
     provenance: Provenance = Field(default_factory=Provenance)
 
 
@@ -109,6 +128,7 @@ class DailyRoutine(BaseModel):
     routine_time: str | None = None
     day_of_week: str | None = None
     notes: str | None = None
+    external_id: str | None = None
     provenance: Provenance = Field(default_factory=Provenance)
 
 

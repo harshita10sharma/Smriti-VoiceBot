@@ -1,5 +1,12 @@
 # Smriti VoiceBot v5.0.0 — Backend & App Developer Background
 
+> **Historical/local reference.** The deployment facts below (Tailscale Funnel, the specific
+> host) describe an earlier pilot deployment, not the current Azure target. For the
+> authoritative current deployment and integration reference, use
+> `docs/AZURE_DEPLOYMENT.md`, `docs/VOICEBOT_INTEGRATION_GUIDE.md`, and
+> `docs/BACKEND_VOICEBOT_INTEGRATION.md`. The API/contract content below remains a useful
+> deep background reference; only the hosting/network details are superseded.
+
 **Audience:** the backend developer and mobile/app developer integrating with the deployed
 Smriti VoiceBot HTTP API.
 **Status:** this document reflects the **verified, currently live** state of the deployment,

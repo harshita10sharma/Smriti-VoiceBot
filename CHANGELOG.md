@@ -6,6 +6,35 @@ project has not yet cut a numbered release; entries below are grouped
 under the date each change actually landed, not a version number, since
 none has been assigned yet.
 
+## 2026-09-13 — Pre-Azure finalization: Swagger fix, Docker fix, Azure deployment plan
+
+- Fixed: the generated OpenAPI document declared no security scheme and no
+  per-operation authentication requirement, because the API-key check is a
+  plain header-based dependency FastAPI doesn't auto-detect as
+  authentication. Swagger UI showed no "Authorize" button and incorrectly
+  implied `x-api-key` was optional on every protected route. Fixed with an
+  explicit OpenAPI security scheme declaration; the actual authentication
+  mechanism and enforcement are unchanged.
+- Fixed: the Dockerfile's `torch`/`transformers`/`parler_tts` installs used
+  unquoted `>=` version specifiers inside a shell `RUN` command, which
+  `/bin/sh` parses as output redirection rather than a version constraint
+  — confirmed by direct reproduction. The version pins were silently
+  ignored on every previous build. Fixed by quoting and pinning to the
+  exact versions verified working this session.
+- Added an additive `action_id` field so a client can correlate a specific
+  action proposal with its later confirmation turn.
+- Re-verified, with real credentials and real network calls: Groq LLM,
+  Sarvam ASR, Sarvam TTS, and Indic Parler-TTS (Assamese) all confirmed
+  working, including a real measured memory footprint for Indic
+  Parler-TTS to size Azure compute correctly rather than guessing.
+- Published `docs/AZURE_DEPLOYMENT.md` as the authoritative Azure
+  deployment reference, and the full Backend/Flutter integration
+  documentation package (`docs/VOICEBOT_INTEGRATION_GUIDE.md`,
+  `docs/BACKEND_VOICEBOT_INTEGRATION.md`,
+  `docs/FLUTTER_VOICEBOT_INTEGRATION.md`, `docs/RELEASE_ACCEPTANCE.md`,
+  and machine-readable OpenAPI/schema/language-matrix/error-catalog
+  exports generated directly from the running application).
+
 ## 2026-09-13 — Integration hardening and real-provider fixes
 
 - Fixed: the voice endpoint's ASR-failure/no-speech error path returned an

@@ -17,9 +17,17 @@ COPY requirements.txt pyproject.toml ./
 # CPU-only torch, matching the already-validated Indic Parler-TTS setup
 # (no GPU on standard Render plans). Installed from the official CPU wheel
 # index so the image doesn't pull CUDA dependencies it will never use.
+# Exact pins matching the versions actually verified this session (real
+# Indic Parler-TTS synthesis succeeded against these exact numbers) --
+# previously these were unquoted `>=` specifiers in a shell RUN command,
+# which /bin/sh parses as output redirection (`torch>=2.3` redirects
+# pip's stdout to a file named `=2.3`, silently dropping the version
+# constraint entirely and littering the image with stray files). Quoting
+# fixes the redirection bug; pinning exactly matches this repository's own
+# reproducibility standard for every other dependency.
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch>=2.3 \
-    && pip install --no-cache-dir transformers>=4.44 parler_tts>=0.1.0
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0" \
+    && pip install --no-cache-dir "transformers==4.46.1" "parler_tts==0.2.3"
 
 COPY . .
 

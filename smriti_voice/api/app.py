@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
@@ -22,6 +23,13 @@ The deterministic command router and the safety layer have final authority over
 every action; the language model can only propose. See SECURITY.md.
 """
 
+# Route tags that never require x-api-key -- kept in one place so the OpenAPI
+# security annotation below can never silently drift from the actual
+# per-router `dependencies=[Depends(require_api_key)]` wiring in
+# api/routes/*.py (the real, enforced authentication; this constant only
+# controls how Swagger/OpenAPI *describes* it, never how it's enforced).
+_UNAUTHENTICATED_TAGS = {'health', 'languages'}
+
 
 def create_app(application: Application | None = None) -> FastAPI:
     configure()
@@ -30,6 +38,37 @@ def create_app(application: Application | None = None) -> FastAPI:
 
     for module in (health, languages, conversation, voice, tools, command, memory_sync):
         api.include_router(module.router)
+
+    def custom_openapi() -> dict:
+        # FastAPI does not know require_api_key (a plain Header-based
+        # Depends(), not a fastapi.security.APIKeyHeader) is an
+        # authentication requirement, so the generated schema by default
+        # has no securitySchemes and no per-operation `security` -- Swagger
+        # then shows no "Authorize" button and marks x-api-key as an
+        # optional header, both misleading. This only changes what the
+        # generated OpenAPI document *describes*; it does not add, remove,
+        # or alter any actual authentication check.
+        if api.openapi_schema:
+            return api.openapi_schema
+        schema = get_openapi(title=api.title, version=api.version,
+                             description=api.description, routes=api.routes)
+        schema.setdefault('components', {}).setdefault('securitySchemes', {})['ApiKeyAuth'] = {
+            'type': 'apiKey', 'in': 'header', 'name': 'x-api-key',
+            'description': 'Server-side credential. Never held by Flutter or a browser; '
+                           'the Backend sends this on every call. See '
+                           'docs/VOICEBOT_INTEGRATION_GUIDE.md §2.'}
+        for path_item in schema.get('paths', {}).values():
+            for operation in path_item.values():
+                if not isinstance(operation, dict):
+                    continue
+                tags = set(operation.get('tags') or [])
+                if tags & _UNAUTHENTICATED_TAGS:
+                    continue
+                operation['security'] = [{'ApiKeyAuth': []}]
+        api.openapi_schema = schema
+        return api.openapi_schema
+
+    api.openapi = custom_openapi
 
     @api.exception_handler(SmritiError)
     async def handle_smriti_error(request: Request, exc: SmritiError) -> JSONResponse:

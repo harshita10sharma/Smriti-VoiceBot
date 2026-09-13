@@ -1,5 +1,12 @@
 # SMRITI VoiceBot API — backend integration guide
 
+> **Historical/local reference.** This document describes the earlier Tailscale
+> Funnel pilot deployment. For the current Azure target, use
+> `docs/AZURE_DEPLOYMENT.md` and `docs/VOICEBOT_INTEGRATION_GUIDE.md` — those
+> are authoritative for base URL, deployment, and integration going forward.
+> The endpoint/request/response content below remains accurate; only the
+> deployment/hosting details are superseded.
+
 This document is for the backend/mobile-app developer integrating with the
 deployed SMRITI VoiceBot service. It covers the two endpoints you need: a
 voice turn (audio in, audio out) and a text turn (no audio). Both go through

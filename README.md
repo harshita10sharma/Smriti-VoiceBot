@@ -171,4 +171,5 @@ and none asserts a fabricated provider result.
 | `docs/BACKEND_VOICEBOT_INTEGRATION.md` | Step-by-step for the Backend developer building the gateway |
 | `docs/FLUTTER_VOICEBOT_INTEGRATION.md` | Step-by-step for the Flutter developer building the client |
 | `docs/RELEASE_ACCEPTANCE.md` | The final, evidence-cited status of every VoiceBot-owned requirement |
+| `docs/AZURE_DEPLOYMENT.md` | The authoritative Azure deployment plan — service, compute tier, config, Docker/Swagger findings |
 | `docs/integration/` | Machine-readable exports: OpenAPI, memory/action schemas, language matrix, error catalog |

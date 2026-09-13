@@ -71,6 +71,12 @@ it — see the evidence column.
 
 ### Deploying on Azure specifically
 
+**See `docs/AZURE_DEPLOYMENT.md` for the full, authoritative Azure deployment plan** —
+recommended service, exact compute tier (with a real measured memory requirement for Indic
+Parler-TTS, which is kept enabled), environment variable matrix, Docker findings, and
+Swagger/OpenAPI verification. The summary below remains accurate but is no longer the primary
+reference.
+
 Nothing in this repository targets Azure by name today — no Bicep/ARM template, no
 `azure-pipelines.yml`. The considerations below are what the *existing* architecture implies
 for that target, so they are decided before deployment rather than discovered after.

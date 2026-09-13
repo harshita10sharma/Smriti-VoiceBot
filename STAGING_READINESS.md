@@ -32,9 +32,9 @@ it — see the evidence column.
 
 | Item | Status | Evidence |
 |---|---|---|
-| ASR | **PARTIAL** | Cloud (Sarvam/OpenAI) code exists, never live-called in this environment (network egress blocked here); local ONNX models real-validated for brx/mni/npi/hin in a prior session with network access, asm downgraded (upstream model repo empty) |
+| ASR | **READY (Sarvam path)** | Live Sarvam ASR calls confirmed against the real API this session (real latency recorded, correctly reported `NO_SPEECH_DETECTED` for a silent/tone input); local ONNX models real-validated for brx/mni/npi/hin in a prior session with network access, asm downgraded (upstream model repo empty) |
 | LLM | **READY (Groq path)** | Live Groq calls succeeded repeatedly this session (e.g. 616ms–8955ms latency samples recorded in `SECURITY.md`); other providers remain code-complete but unverified live |
-| TTS | **PARTIAL** | Mock provider fully tested; Sarvam Bulbul fails in this environment (network egress); Indic Parler-TTS real-validated in a prior session with a granted `HF_TOKEN` for asm/brx/mni/npi |
+| TTS | **READY (Sarvam path)** | A prior deployment shipped with the default model pinned to a since-deprecated Sarvam Bulbul version (`bulbul:v2`) and a speaker name that version no longer accepts, so every real synthesis call failed with `TTS_UNAVAILABLE`. Root-caused against the live API (confirmed via direct HTTP call, not assumption) and fixed by moving the default model to `bulbul:v3` and the default speaker to `anand` (verified compatible with `bulbul:v3` across every configured Sarvam TTS language). A full welcome→job→completed→audio-fetch round trip against the real API now returns genuine playable audio; Indic Parler-TTS real-validated in a prior session with a granted `HF_TOKEN` for asm/brx/mni/npi |
 | Queue (bounded) | **READY** | `SMRITI_VOICE_JOB_QUEUE_MAX`; `tests/integration/test_voice_job_reliability.py` |
 | Cancellation | **READY** | `POST /v1/voice/jobs/{id}/cancel`, race-safe against the worker; `tests/integration/test_voice_job_cancellation_and_deadline.py` |
 | Timeout | **READY** | `SMRITI_VOICE_JOB_PROCESSING_DEADLINE_S`, enforced at read time; same test file |

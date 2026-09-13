@@ -32,7 +32,7 @@ class SarvamTTSProvider:
     name = 'sarvam'
     online = True
 
-    def __init__(self, api_key: str, model: str = 'bulbul:v2', *, timeout: float = 30.0,
+    def __init__(self, api_key: str, model: str = 'bulbul:v3', *, timeout: float = 30.0,
                  max_retries: int = 2, backoff: float = 0.5) -> None:
         self.api_key = api_key
         self.model = model
@@ -57,7 +57,7 @@ class SarvamTTSProvider:
             'text': text[:MAX_TEXT_CHARS],
             'target_language_code': target,
             'model': self.model,
-            'speaker': voice or SARVAM_TTS_VOICES.get(language, 'anushka'),
+            'speaker': voice or SARVAM_TTS_VOICES.get(language, 'anand'),
             # Slightly slower and a little louder: this is read by an elderly user.
             'pace': 0.9,
         }

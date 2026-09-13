@@ -1,0 +1,393 @@
+{
+  "MemorySyncRequest": {
+    "$defs": {
+      "MemorySyncFamilyMember": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "relationship": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Relationship",
+            "type": "string"
+          },
+          "phone_available": {
+            "default": false,
+            "title": "Phone Available",
+            "type": "boolean"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "External Id"
+          },
+          "memory_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Prompt"
+          },
+          "is_deceased": {
+            "default": false,
+            "title": "Is Deceased",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "relationship"
+        ],
+        "title": "MemorySyncFamilyMember",
+        "type": "object"
+      },
+      "MemorySyncMedicine": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "dose": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dose"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Schedule"
+          },
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "External Id"
+          },
+          "chosen_time_min": {
+            "anyOf": [
+              {
+                "maximum": 1439,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Chosen Time Min"
+          },
+          "window_start_min": {
+            "anyOf": [
+              {
+                "maximum": 1439,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Window Start Min"
+          },
+          "window_end_min": {
+            "anyOf": [
+              {
+                "maximum": 1439,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Window End Min"
+          },
+          "days_of_week": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Days Of Week"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "MemorySyncMedicine",
+        "type": "object"
+      },
+      "MemorySyncRoutine": {
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "anyOf": [
+              {
+                "maxLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Time"
+          },
+          "activity": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Activity",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "External Id"
+          }
+        },
+        "required": [
+          "activity"
+        ],
+        "title": "MemorySyncRoutine",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "user_id": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "User Id",
+        "type": "string"
+      },
+      "family_members": {
+        "items": {
+          "$ref": "#/$defs/MemorySyncFamilyMember"
+        },
+        "maxItems": 200,
+        "title": "Family Members",
+        "type": "array"
+      },
+      "medicines": {
+        "items": {
+          "$ref": "#/$defs/MemorySyncMedicine"
+        },
+        "maxItems": 200,
+        "title": "Medicines",
+        "type": "array"
+      },
+      "daily_routines": {
+        "items": {
+          "$ref": "#/$defs/MemorySyncRoutine"
+        },
+        "maxItems": 200,
+        "title": "Daily Routines",
+        "type": "array"
+      },
+      "display_name": {
+        "anyOf": [
+          {
+            "maxLength": 120,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Display Name"
+      },
+      "external_id": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "External Id"
+      },
+      "timezone": {
+        "anyOf": [
+          {
+            "maxLength": 64,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Timezone"
+      },
+      "language_code": {
+        "anyOf": [
+          {
+            "maxLength": 16,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Language Code"
+      },
+      "active": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Active"
+      },
+      "source_revision": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Revision"
+      },
+      "schema_version": {
+        "default": 1,
+        "minimum": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "user_id"
+    ],
+    "title": "MemorySyncRequest",
+    "type": "object"
+  },
+  "MemorySyncResponse": {
+    "properties": {
+      "success": {
+        "default": true,
+        "title": "Success",
+        "type": "boolean"
+      },
+      "user_id": {
+        "title": "User Id",
+        "type": "string"
+      },
+      "family_members_synced": {
+        "title": "Family Members Synced",
+        "type": "integer"
+      },
+      "medicines_synced": {
+        "title": "Medicines Synced",
+        "type": "integer"
+      },
+      "daily_routines_synced": {
+        "title": "Daily Routines Synced",
+        "type": "integer"
+      },
+      "status": {
+        "default": "applied",
+        "title": "Status",
+        "type": "string"
+      },
+      "source_revision": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Revision"
+      }
+    },
+    "required": [
+      "user_id",
+      "family_members_synced",
+      "medicines_synced",
+      "daily_routines_synced"
+    ],
+    "title": "MemorySyncResponse",
+    "type": "object"
+  }
+}

@@ -96,6 +96,30 @@ def test_expired_pending_confirmation_is_never_auto_approved(app):
 # --------------------------------------------------------------------------- #
 # Unknown actions fail closed
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# action_id: a stable correlator for one specific proposal instance
+# --------------------------------------------------------------------------- #
+def test_action_id_is_present_and_stable_across_propose_and_confirm(app):
+    """metadata.action_id lets a client correlate the exact proposal a later
+    confirmation resolves, rather than relying on session_id implying 'the
+    one pending action' -- additive, does not change any existing field."""
+    use_mock_llm(app, script=[tool_call_response('create_reminder', text='Take a walk',
+                                                  remind_at='18:00')])
+    proposed = app.conversation.handle(user_id='demo-user', message='Remind me to take a walk',
+                                       language='eng')
+    assert proposed.metadata.action_id is not None
+
+    confirmed = app.conversation.handle(user_id='demo-user', message='Yes',
+                                        session_id=proposed.session_id, language='eng')
+    assert confirmed.metadata.action_id == proposed.metadata.action_id
+
+
+def test_action_id_is_absent_for_a_turn_with_no_controlled_action(app):
+    use_mock_llm(app, reply='Hello there.')
+    reply = app.conversation.handle(user_id='demo-user', message='hello', language='eng')
+    assert reply.metadata.action_id is None
+
+
 def test_unknown_tool_name_fails_closed(app):
     use_mock_llm(app, script=[tool_call_response('delete_everything', target='all')])
     reply = app.conversation.handle(user_id='demo-user', message='Do something dangerous',

@@ -167,3 +167,8 @@ and none asserts a fabricated provider result.
 | `TESTING.md` | The deterministic/mock test mode: what it proves and does not prove |
 | `PROVISIONING_DESIGN.md` | Current pilot provisioning vs. a future scalable design (not implemented) |
 | `CHANGELOG.md` | Notable changes, grouped by theme and dated from git history |
+| `docs/VOICEBOT_INTEGRATION_GUIDE.md` | The master integration reference — start here for a full API walkthrough |
+| `docs/BACKEND_VOICEBOT_INTEGRATION.md` | Step-by-step for the Backend developer building the gateway |
+| `docs/FLUTTER_VOICEBOT_INTEGRATION.md` | Step-by-step for the Flutter developer building the client |
+| `docs/RELEASE_ACCEPTANCE.md` | The final, evidence-cited status of every VoiceBot-owned requirement |
+| `docs/integration/` | Machine-readable exports: OpenAPI, memory/action schemas, language matrix, error catalog |

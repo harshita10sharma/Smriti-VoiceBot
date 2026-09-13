@@ -1,0 +1,51 @@
+{
+  "generated_from": "INTEGRATION_CONTRACT.md §7, verified against actual responses (test_e2e_contract_harness.py, test_patient_lifecycle.py, test_privacy_data_minimization.py)",
+  "envelope": {
+    "http_exception": {
+      "shape": "{\"detail\": \"<stable, English, human-readable string>\"}",
+      "note": "detail text is stable per condition but is prose, not an enum -- prefer branching on the HTTP status code."
+    },
+    "validation_error_422": {
+      "shape": "{\"detail\": [{\"type\": \"...\", \"loc\": [...], \"msg\": \"...\", \"input\": ...}]}",
+      "note": "detail is a LIST of field errors here, not a string -- this is FastAPI/Pydantic's default shape, unchanged."
+    },
+    "job_error_code": {
+      "shape": "GET /v1/voice/jobs/{job_id} response field 'error_code', only present on a terminal failed job",
+      "note": "the only place a genuinely machine-readable, stable code exists today."
+    }
+  },
+  "http_statuses": [
+    {"status": 400, "meaning": "Malformed request / empty audio / unknown language code", "retryable": false, "client_action": "Fix and resend"},
+    {"status": 401, "meaning": "Missing or invalid x-api-key", "retryable": false, "client_action": "Re-authenticate"},
+    {"status": 403, "meaning": "user_id unauthorized for this key, session belongs to another patient, or patient disabled", "retryable": false, "client_action": "Do not retry; escalate"},
+    {"status": 404, "meaning": "Unknown or not-yours job/audio id, unknown language code path", "retryable": false, "client_action": "Treat as not-found; never distinguishable from cross-patient"},
+    {"status": 409, "meaning": "Idempotency conflict/in-progress, memory-sync stale/conflicting revision, external_id collision", "retryable": "sometimes, see message", "client_action": "Use a new revision/key, or inspect the conflict"},
+    {"status": 413, "meaning": "Upload over byte or duration limit", "retryable": false, "client_action": "Reduce size/duration"},
+    {"status": 415, "meaning": "Not a parseable WAV / wrong content-type", "retryable": false, "client_action": "Fix encoding"},
+    {"status": 422, "meaning": "Schema validation failure (bad field, raw phone number, invalid days_of_week/window)", "retryable": false, "client_action": "Fix payload"},
+    {"status": 429, "meaning": "Rate limit exceeded", "retryable": true, "client_action": "Retry after a delay"},
+    {"status": 500, "meaning": "Internal error", "retryable": "maybe", "client_action": "Log and alert; never retry blindly in a loop"},
+    {"status": 503, "meaning": "Auth not configured / misconfigured server", "retryable": false, "client_action": "Operator issue, not client-fixable"}
+  ],
+  "job_error_codes": [
+    {"error_code": "QUEUE_OVERLOADED", "meaning": "TTS worker queue full", "job_terminal_status": "failed", "retryable": true, "client_action": "Re-submit the voice turn later"},
+    {"error_code": "PROCESSING_TIMEOUT", "meaning": "Synthesis exceeded the deadline", "job_terminal_status": "failed", "retryable": true, "client_action": "Re-submit"},
+    {"error_code": "INTERRUPTED_BY_RESTART", "meaning": "Process restarted mid-job", "job_terminal_status": "failed", "retryable": true, "client_action": "Re-submit"},
+    {"error_code": "NO_TTS_PROVIDER_SUPPORTS_LANGUAGE", "meaning": "No configured TTS for this language", "job_terminal_status": "failed", "retryable": false, "client_action": "Show text only"},
+    {"error_code": "TTS_UNAVAILABLE", "meaning": "Provider call itself failed", "job_terminal_status": "failed", "retryable": true, "client_action": "Show text only for now"}
+  ],
+  "voice_turn_error_codes": [
+    {"error_code": "ASR_UNAVAILABLE", "meaning": "Speech-to-text could not run at all (provider/network failure)", "note": "TurnKind.ERROR; response_text is a safe apology, session_id is still real and continuable"},
+    {"error_code": "NO_SPEECH_DETECTED", "meaning": "ASR ran but the transcript was empty", "note": "same guarantees as ASR_UNAVAILABLE"}
+  ],
+  "non_error_states": [
+    {"field": "audio_expired", "value": true, "meaning": "Audio aged out of retention", "is_error": false, "client_action": "Not an error; the text answer is still valid, audio is just gone -- fall back to text-only"}
+  ],
+  "known_patient_identity_conditions": [
+    {"condition": "unknown patient (user_id never seen before, but authorized by the key)", "result": "served normally; auto-provisioned on first contact -- NOT an error"},
+    {"condition": "disabled patient (users.active = 0)", "result": "403 on every conversational/voice/job/audio endpoint; POST /v1/memory/sync remains reachable so it can re-enable"},
+    {"condition": "unauthorized patient (user_id not in this key's authorized set)", "result": "403"},
+    {"condition": "cross-patient session_id", "result": "403"},
+    {"condition": "cross-patient job_id or audio_id", "result": "404, identical to a nonexistent id -- never distinguishable from not-found"}
+  ]
+}

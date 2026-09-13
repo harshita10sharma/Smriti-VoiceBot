@@ -188,6 +188,7 @@ class TurnOutcome:
     fallback_used: bool = False
     error_code: str | None = None
     topic: str | None = None
+    action_id: str | None = None
 
 
 class ConversationManager:
@@ -276,7 +277,7 @@ class ConversationManager:
             llm_provider=outcome.llm_provider, llm_latency_ms=outcome.llm_latency_ms,
             tool_latency_ms=outcome.tool_latency_ms,
             total_latency_ms=int((time.perf_counter() - started) * 1000),
-            error_code=outcome.error_code, topic=outcome.topic)
+            error_code=outcome.error_code, topic=outcome.topic, action_id=outcome.action_id)
 
         self._persist(session, message, outcome, metadata)
         # Persist pending confirmation / last-subject / language so a
@@ -400,7 +401,7 @@ class ConversationManager:
                 name=contact.name)
             session.set_pending(pending)
             return TurnOutcome(text=pending.prompt, kind=TurnKind.CONFIRMATION,
-                               requires_confirmation=True)
+                               requires_confirmation=True, action_id=pending.action_id)
 
         reply = _text_for(ACTION_REPLIES, granted.action.value, language) or \
             ACTION_REPLIES[Action.HELP.value]['eng']
@@ -417,17 +418,20 @@ class ConversationManager:
 
         if decision == 'cancelled':
             session.set_pending(None)
-            return TurnOutcome(text=cancellation_text(language), kind=TurnKind.CONFIRMATION)
+            return TurnOutcome(text=cancellation_text(language), kind=TurnKind.CONFIRMATION,
+                               action_id=pending.action_id)
 
         if decision == 'unclear':
             # Never treat an ambiguous reply as a yes. Ask once more.
             return TurnOutcome(text=_text_for(CONFIRM_AGAIN, language, language)
                                or CONFIRM_AGAIN['eng'],
-                               kind=TurnKind.CONFIRMATION, requires_confirmation=True)
+                               kind=TurnKind.CONFIRMATION, requires_confirmation=True,
+                               action_id=pending.action_id)
 
         session.set_pending(None)
         if not pending.tool_name:
-            return TurnOutcome(text=cancellation_text(language), kind=TurnKind.CONFIRMATION)
+            return TurnOutcome(text=cancellation_text(language), kind=TurnKind.CONFIRMATION,
+                               action_id=pending.action_id)
 
         context = self._context(language=language, request_id=request_id,
                                 session_id=session.session_id, principal=principal)
@@ -445,7 +449,7 @@ class ConversationManager:
         text = self._confirmation_done_text(result, language)
         return TurnOutcome(text=text, kind=TurnKind.CONFIRMATION, action=action,
                            action_accepted=accepted, tool_results=[result],
-                           tool_latency_ms=result.latency_ms)
+                           tool_latency_ms=result.latency_ms, action_id=pending.action_id)
 
     @staticmethod
     def _confirmation_done_text(result: ToolResult, language: str) -> str:
@@ -554,7 +558,7 @@ class ConversationManager:
                                        tool_calls=tool_calls, tool_results=tool_results,
                                        requires_confirmation=True, llm_provider=provider,
                                        llm_latency_ms=llm_latency, tool_latency_ms=tool_latency,
-                                       topic=topic)
+                                       topic=topic, action_id=pending.action_id)
 
                 payload = (result.data if result.ok else
                            {'error': result.error, 'error_code': result.error_code})

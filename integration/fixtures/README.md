@@ -18,6 +18,13 @@ string shown here):
 - `voice_response.json`
 - `memory_sync_request.json` / `memory_sync_response.json`
 - `job_completed.json`
+- `scenario_fixtures.json` — two-patient isolation, empty datasets, a deceased relative,
+  multiple medications, and stale/conflicting memory-sync revisions, all captured live
+  against a real running app instance the same way as the files above. Its
+  `prompt_injection_memory` and `provider_failure` entries are hand-authored (the same
+  convention as the job-state files below) since they document a guarantee/incident
+  rather than a single capturable response — each names the automated test or changelog
+  entry that is the actual evidence.
 - `error_examples.json`
 
 A few job-state fixtures represent states that are real but timing-dependent to capture

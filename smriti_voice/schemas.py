@@ -5,6 +5,7 @@ HTTP request, a tool argument) is validated rather than duck-typed.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
@@ -192,6 +193,13 @@ class ConversationTurn(BaseModel):
 
 class PendingConfirmation(BaseModel):
     """A controlled action waiting for an explicit yes.  Expires."""
+    # A stable id for this specific proposal instance, independent of
+    # session_id (one session has at most one pending confirmation at a
+    # time, but a client that logs/correlates across the propose and
+    # confirm turns benefits from an explicit id rather than inferring
+    # "the one pending action" implicitly). Surfaced to the API as
+    # ConversationResponse.metadata.action_id.
+    action_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     action: str
     tool_name: str | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -275,6 +283,11 @@ class TurnMetadata(BaseModel):
     # observational (telemetry/debugging); additive field, never read by any
     # existing client.
     topic: str | None = None
+    # The PendingConfirmation.action_id for this turn's proposal or
+    # resolution, if this turn touched one; None for a turn with no
+    # controlled action involved at all. Additive field: a client that
+    # ignores it sees exactly the same contract as before this existed.
+    action_id: str | None = None
 
 
 class ConversationResponse(BaseModel):

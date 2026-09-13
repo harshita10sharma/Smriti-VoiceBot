@@ -1,0 +1,1278 @@
+{
+  "ConversationResponse": {
+    "$defs": {
+      "ExecutionMode": {
+        "description": "How the turn was (or will be) served.",
+        "enum": [
+          "ONLINE_PRIMARY",
+          "OFFLINE_PRIMARY",
+          "DEGRADED",
+          "ERROR"
+        ],
+        "title": "ExecutionMode",
+        "type": "string"
+      },
+      "SafetyDecision": {
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Category"
+          },
+          "refusal_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refusal Key"
+          },
+          "matched": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched",
+            "type": "array"
+          }
+        },
+        "required": [
+          "allowed",
+          "reason"
+        ],
+        "title": "SafetyDecision",
+        "type": "object"
+      },
+      "SafetyLevel": {
+        "enum": [
+          "READ_ONLY",
+          "CONTROLLED_ACTION",
+          "SENSITIVE"
+        ],
+        "title": "SafetyLevel",
+        "type": "string"
+      },
+      "ToolCall": {
+        "description": "A tool request *proposed* by the model.  Never trusted until validated.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Call Id"
+          },
+          "thought_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Thought Signature"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ToolCall",
+        "type": "object"
+      },
+      "ToolResult": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "safety_level": {
+            "$ref": "#/$defs/SafetyLevel",
+            "default": "READ_ONLY"
+          },
+          "executed": {
+            "default": false,
+            "title": "Executed",
+            "type": "boolean"
+          },
+          "latency_ms": {
+            "default": 0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "requires_confirmation": {
+            "default": false,
+            "title": "Requires Confirmation",
+            "type": "boolean"
+          },
+          "confirmation_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirmation Prompt"
+          }
+        },
+        "required": [
+          "name",
+          "ok"
+        ],
+        "title": "ToolResult",
+        "type": "object"
+      },
+      "TurnKind": {
+        "description": "Which branch of the turn router produced the answer.",
+        "enum": [
+          "COMMAND",
+          "CONVERSATION",
+          "MEMORY",
+          "CONFIRMATION",
+          "REFUSAL",
+          "FALLBACK",
+          "ERROR",
+          "WELCOME"
+        ],
+        "title": "TurnKind",
+        "type": "string"
+      },
+      "TurnMetadata": {
+        "description": "Everything measurable about one turn.  Mirrors the telemetry record.",
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/TurnKind"
+          },
+          "execution_mode": {
+            "$ref": "#/$defs/ExecutionMode",
+            "default": "DEGRADED"
+          },
+          "offline": {
+            "default": false,
+            "title": "Offline",
+            "type": "boolean"
+          },
+          "fallback_used": {
+            "default": false,
+            "title": "Fallback Used",
+            "type": "boolean"
+          },
+          "asr_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Asr Provider"
+          },
+          "asr_latency_ms": {
+            "default": 0,
+            "title": "Asr Latency Ms",
+            "type": "integer"
+          },
+          "llm_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Llm Provider"
+          },
+          "llm_latency_ms": {
+            "default": 0,
+            "title": "Llm Latency Ms",
+            "type": "integer"
+          },
+          "tool_latency_ms": {
+            "default": 0,
+            "title": "Tool Latency Ms",
+            "type": "integer"
+          },
+          "tts_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tts Provider"
+          },
+          "tts_latency_ms": {
+            "default": 0,
+            "title": "Tts Latency Ms",
+            "type": "integer"
+          },
+          "total_latency_ms": {
+            "default": 0,
+            "title": "Total Latency Ms",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Topic"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action Id"
+          }
+        },
+        "required": [
+          "request_id",
+          "session_id",
+          "kind"
+        ],
+        "title": "TurnMetadata",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "request_id": {
+        "title": "Request Id",
+        "type": "string"
+      },
+      "session_id": {
+        "title": "Session Id",
+        "type": "string"
+      },
+      "response_text": {
+        "title": "Response Text",
+        "type": "string"
+      },
+      "language": {
+        "title": "Language",
+        "type": "string"
+      },
+      "language_confidence": {
+        "default": 0.0,
+        "title": "Language Confidence",
+        "type": "number"
+      },
+      "kind": {
+        "$ref": "#/$defs/TurnKind",
+        "default": "CONVERSATION"
+      },
+      "action": {
+        "default": "NO_ACTION",
+        "title": "Action",
+        "type": "string"
+      },
+      "action_accepted": {
+        "default": false,
+        "title": "Action Accepted",
+        "type": "boolean"
+      },
+      "tool_calls": {
+        "items": {
+          "$ref": "#/$defs/ToolCall"
+        },
+        "title": "Tool Calls",
+        "type": "array"
+      },
+      "tool_results": {
+        "items": {
+          "$ref": "#/$defs/ToolResult"
+        },
+        "title": "Tool Results",
+        "type": "array"
+      },
+      "safety": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SafetyDecision"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "requires_confirmation": {
+        "default": false,
+        "title": "Requires Confirmation",
+        "type": "boolean"
+      },
+      "metadata": {
+        "$ref": "#/$defs/TurnMetadata"
+      }
+    },
+    "required": [
+      "request_id",
+      "session_id",
+      "response_text",
+      "language",
+      "metadata"
+    ],
+    "title": "ConversationResponse",
+    "type": "object"
+  },
+  "PendingConfirmation": {
+    "description": "A controlled action waiting for an explicit yes.  Expires.",
+    "properties": {
+      "action_id": {
+        "title": "Action Id",
+        "type": "string"
+      },
+      "action": {
+        "title": "Action",
+        "type": "string"
+      },
+      "tool_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tool Name"
+      },
+      "arguments": {
+        "additionalProperties": true,
+        "title": "Arguments",
+        "type": "object"
+      },
+      "prompt": {
+        "default": "",
+        "title": "Prompt",
+        "type": "string"
+      },
+      "language": {
+        "default": "eng",
+        "title": "Language",
+        "type": "string"
+      },
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "expires_in_turns": {
+        "default": 2,
+        "title": "Expires In Turns",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "title": "PendingConfirmation",
+    "type": "object"
+  },
+  "TurnMetadata": {
+    "$defs": {
+      "ExecutionMode": {
+        "description": "How the turn was (or will be) served.",
+        "enum": [
+          "ONLINE_PRIMARY",
+          "OFFLINE_PRIMARY",
+          "DEGRADED",
+          "ERROR"
+        ],
+        "title": "ExecutionMode",
+        "type": "string"
+      },
+      "TurnKind": {
+        "description": "Which branch of the turn router produced the answer.",
+        "enum": [
+          "COMMAND",
+          "CONVERSATION",
+          "MEMORY",
+          "CONFIRMATION",
+          "REFUSAL",
+          "FALLBACK",
+          "ERROR",
+          "WELCOME"
+        ],
+        "title": "TurnKind",
+        "type": "string"
+      }
+    },
+    "description": "Everything measurable about one turn.  Mirrors the telemetry record.",
+    "properties": {
+      "request_id": {
+        "title": "Request Id",
+        "type": "string"
+      },
+      "session_id": {
+        "title": "Session Id",
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/$defs/TurnKind"
+      },
+      "execution_mode": {
+        "$ref": "#/$defs/ExecutionMode",
+        "default": "DEGRADED"
+      },
+      "offline": {
+        "default": false,
+        "title": "Offline",
+        "type": "boolean"
+      },
+      "fallback_used": {
+        "default": false,
+        "title": "Fallback Used",
+        "type": "boolean"
+      },
+      "asr_provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Asr Provider"
+      },
+      "asr_latency_ms": {
+        "default": 0,
+        "title": "Asr Latency Ms",
+        "type": "integer"
+      },
+      "llm_provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Llm Provider"
+      },
+      "llm_latency_ms": {
+        "default": 0,
+        "title": "Llm Latency Ms",
+        "type": "integer"
+      },
+      "tool_latency_ms": {
+        "default": 0,
+        "title": "Tool Latency Ms",
+        "type": "integer"
+      },
+      "tts_provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tts Provider"
+      },
+      "tts_latency_ms": {
+        "default": 0,
+        "title": "Tts Latency Ms",
+        "type": "integer"
+      },
+      "total_latency_ms": {
+        "default": 0,
+        "title": "Total Latency Ms",
+        "type": "integer"
+      },
+      "error_code": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Error Code"
+      },
+      "topic": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Topic"
+      },
+      "action_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Action Id"
+      }
+    },
+    "required": [
+      "request_id",
+      "session_id",
+      "kind"
+    ],
+    "title": "TurnMetadata",
+    "type": "object"
+  },
+  "VoiceResponse": {
+    "$defs": {
+      "ExecutionMode": {
+        "description": "How the turn was (or will be) served.",
+        "enum": [
+          "ONLINE_PRIMARY",
+          "OFFLINE_PRIMARY",
+          "DEGRADED",
+          "ERROR"
+        ],
+        "title": "ExecutionMode",
+        "type": "string"
+      },
+      "SafetyDecision": {
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Category"
+          },
+          "refusal_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refusal Key"
+          },
+          "matched": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched",
+            "type": "array"
+          }
+        },
+        "required": [
+          "allowed",
+          "reason"
+        ],
+        "title": "SafetyDecision",
+        "type": "object"
+      },
+      "SafetyLevel": {
+        "enum": [
+          "READ_ONLY",
+          "CONTROLLED_ACTION",
+          "SENSITIVE"
+        ],
+        "title": "SafetyLevel",
+        "type": "string"
+      },
+      "ToolCall": {
+        "description": "A tool request *proposed* by the model.  Never trusted until validated.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Call Id"
+          },
+          "thought_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Thought Signature"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ToolCall",
+        "type": "object"
+      },
+      "ToolResult": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "safety_level": {
+            "$ref": "#/$defs/SafetyLevel",
+            "default": "READ_ONLY"
+          },
+          "executed": {
+            "default": false,
+            "title": "Executed",
+            "type": "boolean"
+          },
+          "latency_ms": {
+            "default": 0,
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "requires_confirmation": {
+            "default": false,
+            "title": "Requires Confirmation",
+            "type": "boolean"
+          },
+          "confirmation_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirmation Prompt"
+          }
+        },
+        "required": [
+          "name",
+          "ok"
+        ],
+        "title": "ToolResult",
+        "type": "object"
+      },
+      "TurnKind": {
+        "description": "Which branch of the turn router produced the answer.",
+        "enum": [
+          "COMMAND",
+          "CONVERSATION",
+          "MEMORY",
+          "CONFIRMATION",
+          "REFUSAL",
+          "FALLBACK",
+          "ERROR",
+          "WELCOME"
+        ],
+        "title": "TurnKind",
+        "type": "string"
+      },
+      "TurnMetadata": {
+        "description": "Everything measurable about one turn.  Mirrors the telemetry record.",
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/TurnKind"
+          },
+          "execution_mode": {
+            "$ref": "#/$defs/ExecutionMode",
+            "default": "DEGRADED"
+          },
+          "offline": {
+            "default": false,
+            "title": "Offline",
+            "type": "boolean"
+          },
+          "fallback_used": {
+            "default": false,
+            "title": "Fallback Used",
+            "type": "boolean"
+          },
+          "asr_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Asr Provider"
+          },
+          "asr_latency_ms": {
+            "default": 0,
+            "title": "Asr Latency Ms",
+            "type": "integer"
+          },
+          "llm_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Llm Provider"
+          },
+          "llm_latency_ms": {
+            "default": 0,
+            "title": "Llm Latency Ms",
+            "type": "integer"
+          },
+          "tool_latency_ms": {
+            "default": 0,
+            "title": "Tool Latency Ms",
+            "type": "integer"
+          },
+          "tts_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tts Provider"
+          },
+          "tts_latency_ms": {
+            "default": 0,
+            "title": "Tts Latency Ms",
+            "type": "integer"
+          },
+          "total_latency_ms": {
+            "default": 0,
+            "title": "Total Latency Ms",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Topic"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action Id"
+          }
+        },
+        "required": [
+          "request_id",
+          "session_id",
+          "kind"
+        ],
+        "title": "TurnMetadata",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "request_id": {
+        "title": "Request Id",
+        "type": "string"
+      },
+      "session_id": {
+        "title": "Session Id",
+        "type": "string"
+      },
+      "response_text": {
+        "title": "Response Text",
+        "type": "string"
+      },
+      "language": {
+        "title": "Language",
+        "type": "string"
+      },
+      "language_confidence": {
+        "default": 0.0,
+        "title": "Language Confidence",
+        "type": "number"
+      },
+      "kind": {
+        "$ref": "#/$defs/TurnKind",
+        "default": "CONVERSATION"
+      },
+      "action": {
+        "default": "NO_ACTION",
+        "title": "Action",
+        "type": "string"
+      },
+      "action_accepted": {
+        "default": false,
+        "title": "Action Accepted",
+        "type": "boolean"
+      },
+      "tool_calls": {
+        "items": {
+          "$ref": "#/$defs/ToolCall"
+        },
+        "title": "Tool Calls",
+        "type": "array"
+      },
+      "tool_results": {
+        "items": {
+          "$ref": "#/$defs/ToolResult"
+        },
+        "title": "Tool Results",
+        "type": "array"
+      },
+      "safety": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SafetyDecision"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "requires_confirmation": {
+        "default": false,
+        "title": "Requires Confirmation",
+        "type": "boolean"
+      },
+      "metadata": {
+        "$ref": "#/$defs/TurnMetadata"
+      },
+      "transcript": {
+        "default": "",
+        "title": "Transcript",
+        "type": "string"
+      },
+      "job_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Job Id"
+      },
+      "job_status": {
+        "default": "NOT_REQUESTED",
+        "title": "Job Status",
+        "type": "string"
+      },
+      "audio_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Audio Id"
+      },
+      "audio_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Audio Url"
+      },
+      "audio_available": {
+        "default": false,
+        "title": "Audio Available",
+        "type": "boolean"
+      },
+      "audio_unavailable_reason": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Audio Unavailable Reason"
+      },
+      "tts_provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tts Provider"
+      }
+    },
+    "required": [
+      "request_id",
+      "session_id",
+      "response_text",
+      "language",
+      "metadata"
+    ],
+    "title": "VoiceResponse",
+    "type": "object"
+  },
+  "WelcomeResponse": {
+    "$defs": {
+      "TurnKind": {
+        "description": "Which branch of the turn router produced the answer.",
+        "enum": [
+          "COMMAND",
+          "CONVERSATION",
+          "MEMORY",
+          "CONFIRMATION",
+          "REFUSAL",
+          "FALLBACK",
+          "ERROR",
+          "WELCOME"
+        ],
+        "title": "TurnKind",
+        "type": "string"
+      }
+    },
+    "properties": {
+      "request_id": {
+        "title": "Request Id",
+        "type": "string"
+      },
+      "session_id": {
+        "title": "Session Id",
+        "type": "string"
+      },
+      "response_text": {
+        "title": "Response Text",
+        "type": "string"
+      },
+      "language": {
+        "title": "Language",
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/$defs/TurnKind",
+        "default": "WELCOME"
+      },
+      "session_restored": {
+        "default": false,
+        "title": "Session Restored",
+        "type": "boolean"
+      },
+      "job_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Job Id"
+      },
+      "job_status": {
+        "default": "NOT_REQUESTED",
+        "title": "Job Status",
+        "type": "string"
+      },
+      "audio_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Audio Id"
+      },
+      "audio_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Audio Url"
+      },
+      "audio_available": {
+        "default": false,
+        "title": "Audio Available",
+        "type": "boolean"
+      },
+      "audio_unavailable_reason": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Audio Unavailable Reason"
+      },
+      "tts_provider": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tts Provider"
+      }
+    },
+    "required": [
+      "request_id",
+      "session_id",
+      "response_text",
+      "language"
+    ],
+    "title": "WelcomeResponse",
+    "type": "object"
+  }
+}

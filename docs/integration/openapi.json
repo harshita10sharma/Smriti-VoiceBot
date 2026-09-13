@@ -1,0 +1,2062 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Smriti Voice API",
+    "description": "SMRITI voice assistant for elderly care.\n\nThe deterministic command router and the safety layer have final authority over\nevery action; the language model can only propose. See SECURITY.md.\n",
+    "version": "5.0.0"
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/languages": {
+      "get": {
+        "tags": [
+          "languages"
+        ],
+        "summary": "Languages",
+        "operationId": "languages_v1_languages_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Languages V1 Languages Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/languages/{code}": {
+      "get": {
+        "tags": [
+          "languages"
+        ],
+        "summary": "Language",
+        "operationId": "language_v1_languages__code__get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Language V1 Languages  Code  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/conversation": {
+      "post": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "Conversation",
+        "description": "One text turn: safety screen, deterministic command router, LLM +\ntools, deterministic fallback -- in that order (see\nconversation/manager.py). Requires ``x-api-key``; ``user_id`` must be\nauthorized for that key and (if provisioned) not disabled, or this\nreturns 403. An optional ``Idempotency-Key`` header makes a retried\nidentical request return the original result instead of executing\nagain; the same key with a different body returns 409.",
+        "operationId": "conversation_v1_conversation_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          },
+          {
+            "name": "x-idempotency-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/conversation/welcome": {
+      "post": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "Welcome",
+        "description": "Open the app, create or restore a session, and get a deterministic\nproactive greeting -- with no fake ASR turn, no LLM call, and no effect\non the very next real message the user sends. See\nConversationManager.welcome for the exact guarantees.",
+        "operationId": "welcome_v1_conversation_welcome_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WelcomeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/conversation/voice": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Conversation Voice",
+        "description": "One voice turn: WAV in, ASR + conversation run synchronously and\n``response_text`` returns immediately, but TTS is asynchronous --\n``job_id``/``job_status`` are returned instead of audio. Poll\n``GET /v1/voice/jobs/{job_id}`` until it is no longer\nqueued/processing, then ``GET /v1/audio/{audio_id}`` once. Same\nownership and optional ``Idempotency-Key`` behavior as\n``POST /v1/conversation`` (idempotency is keyed on the exact audio\nbytes plus ``user_id``/``session_id``/``language``/``speak``).",
+        "operationId": "conversation_voice_v1_conversation_voice_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Request-Id"
+            }
+          },
+          {
+            "name": "x-idempotency-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_conversation_voice_v1_conversation_voice_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/{audio_id}": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Audio",
+        "operationId": "audio_v1_audio__audio_id__get",
+        "parameters": [
+          {
+            "name": "audio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Audio Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Voice Job Status",
+        "operationId": "voice_job_status_v1_voice_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceJobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Cancel Voice Job",
+        "description": "Cancels a job still `queued` or `processing`. Same not-found-vs-\nunauthorized fail-closed behavior as job status/audio retrieval.\nCancelling an already-terminal job (completed/failed/cancelled) is not\nan error -- it returns `cancelled=false` with that job's actual\ncurrent status, since there is nothing left to cancel. See\nVoiceJobRepository.cancel for the exact race semantics against a\nworker that may be mid-synthesis at the same moment.",
+        "operationId": "cancel_voice_job_v1_voice_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceJobCancelResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Tools",
+        "operationId": "tools_v1_tools_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Tools V1 Tools Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/command": {
+      "post": {
+        "tags": [
+          "command"
+        ],
+        "summary": "Command",
+        "operationId": "command_v1_command_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_command_v1_command_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Command V1 Command Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memory/sync": {
+      "post": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Memory Sync",
+        "description": "Full-snapshot, atomic replace of this patient's caregiver-sourced\nfamily/medicine/routine rows -- per category, an empty array clears\nthat category's caregiver-sourced rows, a non-empty array replaces\nthem, and rows from any other source (the patient's own words, an\nassistant note, seed/import data) are never touched. Auto-provisions\nthe patient (idempotent, never overwrites an existing display name) if\nthis is the first contact for that ``user_id``.\n\n``source_revision`` is optional. Omit it for the original, unversioned\nbehaviour (every call applies unconditionally). Provide it to get\nstale/no-op/conflict detection: an older revision than the one already\napplied, or the same revision with different content, returns 409;\nthe same revision with identical content is a harmless 200 no-op; a\nnewer revision applies and is recorded.",
+        "operationId": "memory_sync_v1_memory_sync_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemorySyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySyncResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_command_v1_command_post": {
+        "properties": {
+          "audio_wav": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Audio Wav"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio_wav",
+          "language"
+        ],
+        "title": "Body_command_v1_command_post"
+      },
+      "Body_conversation_voice_v1_conversation_voice_post": {
+        "properties": {
+          "audio_wav": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Audio Wav"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "speak": {
+            "type": "boolean",
+            "title": "Speak",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio_wav",
+          "user_id"
+        ],
+        "title": "Body_conversation_voice_v1_conversation_voice_post"
+      },
+      "ConversationRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "message"
+        ],
+        "title": "ConversationRequest"
+      },
+      "ConversationResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "response_text": {
+            "type": "string",
+            "title": "Response Text"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "language_confidence": {
+            "type": "number",
+            "title": "Language Confidence",
+            "default": 0.0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TurnKind",
+            "default": "CONVERSATION"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "NO_ACTION"
+          },
+          "action_accepted": {
+            "type": "boolean",
+            "title": "Action Accepted",
+            "default": false
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "type": "array",
+            "title": "Tool Calls"
+          },
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/ToolResult"
+            },
+            "type": "array",
+            "title": "Tool Results"
+          },
+          "safety": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SafetyDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": false
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/TurnMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "session_id",
+          "response_text",
+          "language",
+          "metadata"
+        ],
+        "title": "ConversationResponse"
+      },
+      "ExecutionMode": {
+        "type": "string",
+        "enum": [
+          "ONLINE_PRIMARY",
+          "OFFLINE_PRIMARY",
+          "DEGRADED",
+          "ERROR"
+        ],
+        "title": "ExecutionMode",
+        "description": "How the turn was (or will be) served."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MemorySyncFamilyMember": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "relationship": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Relationship"
+          },
+          "phone_available": {
+            "type": "boolean",
+            "title": "Phone Available",
+            "default": false
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "memory_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Prompt"
+          },
+          "is_deceased": {
+            "type": "boolean",
+            "title": "Is Deceased",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "relationship"
+        ],
+        "title": "MemorySyncFamilyMember"
+      },
+      "MemorySyncMedicine": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "dose": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dose"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "chosen_time_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1439.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen Time Min"
+          },
+          "window_start_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1439.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start Min"
+          },
+          "window_end_min": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1439.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window End Min"
+          },
+          "days_of_week": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Of Week"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "MemorySyncMedicine"
+      },
+      "MemorySyncRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "family_members": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySyncFamilyMember"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Family Members"
+          },
+          "medicines": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySyncMedicine"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Medicines"
+          },
+          "daily_routines": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySyncRoutine"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Daily Routines"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "language_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language Code"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "source_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Revision"
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "MemorySyncRequest"
+      },
+      "MemorySyncResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "family_members_synced": {
+            "type": "integer",
+            "title": "Family Members Synced"
+          },
+          "medicines_synced": {
+            "type": "integer",
+            "title": "Medicines Synced"
+          },
+          "daily_routines_synced": {
+            "type": "integer",
+            "title": "Daily Routines Synced"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "applied"
+          },
+          "source_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "family_members_synced",
+          "medicines_synced",
+          "daily_routines_synced"
+        ],
+        "title": "MemorySyncResponse"
+      },
+      "MemorySyncRoutine": {
+        "properties": {
+          "time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          },
+          "activity": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Activity"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "activity"
+        ],
+        "title": "MemorySyncRoutine"
+      },
+      "SafetyDecision": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "refusal_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Key"
+          },
+          "matched": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched"
+          }
+        },
+        "type": "object",
+        "required": [
+          "allowed",
+          "reason"
+        ],
+        "title": "SafetyDecision"
+      },
+      "SafetyLevel": {
+        "type": "string",
+        "enum": [
+          "READ_ONLY",
+          "CONTROLLED_ACTION",
+          "SENSITIVE"
+        ],
+        "title": "SafetyLevel"
+      },
+      "ToolCall": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "thought_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thought Signature"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ToolCall",
+        "description": "A tool request *proposed* by the model.  Never trusted until validated."
+      },
+      "ToolResult": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "safety_level": {
+            "$ref": "#/components/schemas/SafetyLevel",
+            "default": "READ_ONLY"
+          },
+          "executed": {
+            "type": "boolean",
+            "title": "Executed",
+            "default": false
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms",
+            "default": 0
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": false
+          },
+          "confirmation_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ok"
+        ],
+        "title": "ToolResult"
+      },
+      "TurnKind": {
+        "type": "string",
+        "enum": [
+          "COMMAND",
+          "CONVERSATION",
+          "MEMORY",
+          "CONFIRMATION",
+          "REFUSAL",
+          "FALLBACK",
+          "ERROR",
+          "WELCOME"
+        ],
+        "title": "TurnKind",
+        "description": "Which branch of the turn router produced the answer."
+      },
+      "TurnMetadata": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TurnKind"
+          },
+          "execution_mode": {
+            "$ref": "#/components/schemas/ExecutionMode",
+            "default": "DEGRADED"
+          },
+          "offline": {
+            "type": "boolean",
+            "title": "Offline",
+            "default": false
+          },
+          "fallback_used": {
+            "type": "boolean",
+            "title": "Fallback Used",
+            "default": false
+          },
+          "asr_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asr Provider"
+          },
+          "asr_latency_ms": {
+            "type": "integer",
+            "title": "Asr Latency Ms",
+            "default": 0
+          },
+          "llm_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Provider"
+          },
+          "llm_latency_ms": {
+            "type": "integer",
+            "title": "Llm Latency Ms",
+            "default": 0
+          },
+          "tool_latency_ms": {
+            "type": "integer",
+            "title": "Tool Latency Ms",
+            "default": 0
+          },
+          "tts_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tts Provider"
+          },
+          "tts_latency_ms": {
+            "type": "integer",
+            "title": "Tts Latency Ms",
+            "default": 0
+          },
+          "total_latency_ms": {
+            "type": "integer",
+            "title": "Total Latency Ms",
+            "default": 0
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "session_id",
+          "kind"
+        ],
+        "title": "TurnMetadata",
+        "description": "Everything measurable about one turn.  Mirrors the telemetry record."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VoiceJobCancelResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "cancelled": {
+            "type": "boolean",
+            "title": "Cancelled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "cancelled"
+        ],
+        "title": "VoiceJobCancelResponse",
+        "description": "POST /v1/voice/jobs/{job_id}/cancel."
+      },
+      "VoiceJobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "audio_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Id"
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "tts_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tts Provider"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "audio_expired": {
+            "type": "boolean",
+            "title": "Audio Expired",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "language"
+        ],
+        "title": "VoiceJobStatusResponse",
+        "description": "GET /v1/voice/jobs/{job_id}."
+      },
+      "VoiceResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "response_text": {
+            "type": "string",
+            "title": "Response Text"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "language_confidence": {
+            "type": "number",
+            "title": "Language Confidence",
+            "default": 0.0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TurnKind",
+            "default": "CONVERSATION"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "NO_ACTION"
+          },
+          "action_accepted": {
+            "type": "boolean",
+            "title": "Action Accepted",
+            "default": false
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "type": "array",
+            "title": "Tool Calls"
+          },
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/ToolResult"
+            },
+            "type": "array",
+            "title": "Tool Results"
+          },
+          "safety": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SafetyDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "title": "Requires Confirmation",
+            "default": false
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/TurnMetadata"
+          },
+          "transcript": {
+            "type": "string",
+            "title": "Transcript",
+            "default": ""
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_status": {
+            "type": "string",
+            "title": "Job Status",
+            "default": "NOT_REQUESTED"
+          },
+          "audio_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Id"
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "audio_available": {
+            "type": "boolean",
+            "title": "Audio Available",
+            "default": false
+          },
+          "audio_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Unavailable Reason"
+          },
+          "tts_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tts Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "session_id",
+          "response_text",
+          "language",
+          "metadata"
+        ],
+        "title": "VoiceResponse"
+      },
+      "WelcomeRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "speak": {
+            "type": "boolean",
+            "title": "Speak",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "WelcomeRequest",
+        "description": "POST /v1/conversation/welcome -- open the app, get a proactive first\nmessage with no meaningless ASR/text turn required. Never consumes a\nuser turn: no ``message`` field exists because none is expected."
+      },
+      "WelcomeResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "response_text": {
+            "type": "string",
+            "title": "Response Text"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TurnKind",
+            "default": "WELCOME"
+          },
+          "session_restored": {
+            "type": "boolean",
+            "title": "Session Restored",
+            "default": false
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_status": {
+            "type": "string",
+            "title": "Job Status",
+            "default": "NOT_REQUESTED"
+          },
+          "audio_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Id"
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "audio_available": {
+            "type": "boolean",
+            "title": "Audio Available",
+            "default": false
+          },
+          "audio_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Unavailable Reason"
+          },
+          "tts_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tts Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "session_id",
+          "response_text",
+          "language"
+        ],
+        "title": "WelcomeResponse"
+      }
+    }
+  }
+}

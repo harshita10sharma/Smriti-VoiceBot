@@ -119,7 +119,14 @@ def cmd_chat(args) -> int:
             return 0
         if not message:
             continue
-        language = args.language or app.detector.detect(message).language
+        if args.language:
+            language = args.language
+        else:
+            detection = app.detector.detect(message)
+            # No real signal (e.g. digits/punctuation only) must not
+            # silently force English over the session's real language --
+            # see the same fix in api/routes/conversation.py.
+            language = detection.language if detection.method != 'default' else None
         reply = app.conversation.handle(user_id=args.user_id, message=message,
                                         session_id=session_id, language=language)
         session_id = reply.session_id

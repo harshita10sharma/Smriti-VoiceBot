@@ -6,6 +6,30 @@ project has not yet cut a numbered release; entries below are grouped
 under the date each change actually landed, not a version number, since
 none has been assigned yet.
 
+## 2026-09-13 — Zero-signal text no longer overrides an active session's language
+
+- Fixed: a text or voice turn carrying no real language signal (e.g. a
+  reply that's just digits or punctuation) was treated as a confident
+  English detection and silently overrode an ongoing non-English
+  session's actual language for that turn. Fixed in both the text route
+  and the voice pipeline to fall back to the session's current language
+  in that specific case, using the existing detector's own signal
+  (`method == 'default'`) rather than a new heuristic.
+- Audited and confirmed already correct, unchanged: automatic per-turn
+  text language detection at the API boundary, ASR-driven voice language
+  detection and its priority order, per-turn session language updates
+  (a patient can switch languages naturally mid-conversation), the LLM
+  being explicitly instructed to answer in the effective language, no
+  silent TTS-language substitution when a provider can't speak the
+  detected language, and deterministic response templates (refusals,
+  confirmations) rendering in the effective language.
+- Noted, not fixed (separate, broader scope): the deterministic safety
+  screen's keyword lists are English-only, so a non-English phrasing of a
+  sensitive request (e.g. asking to change a medication dose, in Hindi)
+  is not caught by the deterministic gate and falls through to the LLM's
+  own judgment instead. Translating every safety keyword list to every
+  supported language is a separate piece of work.
+
 ## 2026-09-13 — Pre-Azure finalization: Swagger fix, Docker fix, Azure deployment plan
 
 - Fixed: the generated OpenAPI document declared no security scheme and no

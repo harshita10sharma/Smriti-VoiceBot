@@ -54,7 +54,15 @@ def conversation(payload: ConversationRequest,
         # alias that IS a supported language, just spelled differently.
         language = app.languages.get(language).code
     else:
-        language = app.detector.detect(payload.message).language
+        detection = app.detector.detect(payload.message)
+        # method == 'default' means no real signal was found at all (e.g.
+        # the message is just digits/punctuation) and the detector fell
+        # back to 'eng' with zero confidence -- that is not a genuine
+        # detection of the user's language, so it must not silently
+        # override an ongoing session's real language. Pass None through
+        # and let ConversationManager's own session-language fallback
+        # resolve it instead of forcing English here.
+        language = detection.language if detection.method != 'default' else None
 
     # Optional: a client that sent Idempotency-Key gets exactly-once
     # execution for this (user_id, key) pair. A client that sends nothing

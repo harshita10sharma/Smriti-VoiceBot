@@ -93,7 +93,17 @@ class VoicePipeline:
         # 2. Which language was that?
         detection = self.app.detector.detect(asr.transcript, provider_hint=asr.language,
                                              provider_confidence=asr.language_confidence)
-        turn_language = language or detection.language
+        # detection.method == 'default' means the detector found no real
+        # signal at all (e.g. a transcript that's just digits/punctuation)
+        # and fell back to 'eng' with zero confidence -- that is not a
+        # genuine detection, so it must not silently override an ongoing
+        # session's real language. Pass None through in that case and let
+        # ConversationManager's own `language or session.language or 'eng'`
+        # fallback resolve it correctly (session language if one exists,
+        # 'eng' only for a genuinely brand-new session with no signal at
+        # all either way).
+        detected_language = detection.language if detection.method != 'default' else None
+        turn_language = language or detected_language
 
         # 3. The conversation turn (safety, commands, tools, model).
         reply = self.app.conversation.handle(user_id=user_id, message=asr.transcript,
@@ -101,13 +111,15 @@ class VoicePipeline:
                                              request_id=rid)
 
         # 4. Queue speech synthesis; the caller polls for the result rather
-        # than waiting on this request for it.
+        # than waiting on this request for it. Use reply.language (the
+        # manager's actually-resolved effective language), not the
+        # possibly-None turn_language above, as the source of truth here.
         job_id = None
         job_status = 'NOT_REQUESTED'
         audio_reason = 'TTS_NOT_REQUESTED'
         if speak:
             job_id = self.app.voice_jobs.create(
-                user_id=user_id, session_id=reply.session_id, language=turn_language,
+                user_id=user_id, session_id=reply.session_id, language=reply.language,
                 response_text=reply.response_text)
             self.app.voice_job_worker.submit(job_id)
             job_status = 'QUEUED'

@@ -353,6 +353,33 @@ on this repository alone.
 VoiceBot resolves it to the canonical form before any downstream lookup — this was a real
 bug (silent English fallback for `hi`/`as`) found and fixed; see `CHANGELOG.md`.
 
+**Automatic per-turn language detection, and its priority order.** If you omit `language`
+on `POST /v1/conversation`, VoiceBot detects it from the actual message text on every turn
+(not just the first) using the existing script/NE-LID detector — you don't need to track or
+send the patient's language yourself for this to work. The effective priority, both for text
+and voice (ASR-detected), is:
+
+1. `language` explicitly supplied on the request — always wins.
+2. A real detection signal from the current input (script/NE-LID for text; the ASR
+   provider's own language hint, or the same detector on the transcript, for voice).
+3. The session's current language, if the current turn's detection produced no real signal
+   at all (e.g. a text turn that's just digits or punctuation) — this does **not** fall back
+   to English/the configured default, so an ongoing non-English conversation isn't derailed
+   by one signal-free reply.
+4. `eng`, only for a genuinely new session with no signal and no prior language of its own.
+
+Because detection re-runs every turn, a patient can naturally switch languages mid-session
+(English → Hindi → English, say) and each turn's `response.language` reflects that turn's
+own effective language, not whatever the session started with. The response's `language`
+field always reflects this effective language — read it per turn rather than assuming
+it matches whatever you sent.
+
+**Mixed-language input** uses the same detector's dominant-script signal — no separate
+multilingual classifier exists. A sentence with a long-enough English loanword or two can
+legitimately tip the dominant script to English even when a human would call the sentence
+primarily Hindi; this is the existing detector's real, by-design behavior, not a bug to route
+around client-side.
+
 ## 13. Action semantics
 
 ```

@@ -14,6 +14,7 @@ resolved, not a record of a completed deployment.
 |---|---|
 | `env.template` | Every environment variable the application needs, with placeholder values — copy to `.env.production` on the instance (never commit the filled-in version) |
 | `provision.sh` | Creates the EC2 instance, security group, key pair, and EBS volume via AWS CLI |
+| `first_boot_setup.sh` | Runs ON the instance: formats/mounts `/data`, installs Docker, installs Caddy for automatic HTTPS |
 | `deploy.sh` | Builds the Docker image, pushes to ECR (optional) or transfers directly, and starts the container on the instance |
 | `smoke_test.sh` | Runs the post-deployment HTTP checks from `docs/AWS_DEPLOYMENT.md` §post-deployment against a live URL |
 | `rollback.md` | Exact rollback sequence if a deployment needs to be reverted |
@@ -40,9 +41,14 @@ cp env.template .env.production.local
 # 2. Provision AWS resources
 ./provision.sh
 
-# 3. Deploy the application
-./deploy.sh
+# 3. One-time instance setup: format/mount /data, install Docker + Caddy
+scp -i smriti-voicebot-key.pem first_boot_setup.sh ec2-user@<PUBLIC_IP>:/tmp/
+ssh -i smriti-voicebot-key.pem ec2-user@<PUBLIC_IP> \
+  "sudo DOMAIN=<your-domain-pointed-at-PUBLIC_IP> bash /tmp/first_boot_setup.sh"
 
-# 4. Verify
-./smoke_test.sh https://<the-domain-or-IP-provision.sh-printed>
+# 4. Deploy the application
+./deploy.sh .env.production.local <PUBLIC_IP>
+
+# 5. Verify
+./smoke_test.sh https://<your-domain>
 ```

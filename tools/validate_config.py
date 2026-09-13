@@ -84,12 +84,16 @@ def main() -> int:
     credentials = app.config.providers.configured_providers()
     for name, present in credentials.items():
         check(f'{name} credential present', present, '', hard=False)
-    check('any LLM provider buildable',
-          any(ready for name, ready in app.llm.available().items() if name != 'mock'),
-          'only the mock provider is available', hard=False)
-    check('any TTS provider buildable',
-          any(app.tts.available().get(name) for name in ('sarvam', 'local', 'indic_parler')),
-          'no real TTS provider is available', hard=False)
+    llm_ready = any(ready for name, ready in app.llm.available().items() if name != 'mock')
+    llm_names = ', '.join(sorted(name for name, ready in app.llm.available().items()
+                                  if ready and name != 'mock'))
+    check('any LLM provider buildable', llm_ready,
+          llm_names if llm_ready else 'only the mock provider is available', hard=False)
+    tts_available = app.tts.available()
+    tts_names = ', '.join(name for name in ('sarvam', 'local', 'indic_parler')
+                          if tts_available.get(name))
+    check('any TTS provider buildable', bool(tts_names),
+          tts_names if tts_names else 'no real TTS provider is available', hard=False)
 
     print('\nIndic Parler-TTS (asm/brx/mni/npi)')
     if app.config.providers.indic_parler_enabled:

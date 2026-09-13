@@ -235,6 +235,8 @@ instance's Elastic IP, with a reverse proxy (Caddy or nginx + Certbot) on the in
 terminating TLS via Let's Encrypt and proxying to the container's internal port. This avoids
 introducing an Application Load Balancer (a real cost and complexity addition for a single
 instance with no need for load distribution) while still giving a real, stable HTTPS URL.
+`deployment/aws/first_boot_setup.sh` installs and configures Caddy for exactly this (`reverse_proxy 127.0.0.1:8000`, automatic certificate) — the domain must already resolve to the
+instance's Elastic IP before running it, or Let's Encrypt's HTTP-01 challenge fails.
 
 ## 12. Deployment method
 
@@ -262,23 +264,27 @@ are ready to run once AWS credentials are configured in this environment (§15).
 
 ## 15. The actual blocker
 
+The AWS CLI (v1.46.1) is now installed in this development environment. The remaining
+blocker is credentials only:
+
 ```
 $ aws sts get-caller-identity
-bash: aws: command not found
+Unable to locate credentials. You can configure credentials by running "aws configure".
 ```
-No AWS CLI installed, no `~/.aws/credentials`, no `~/.aws/config`, no `AWS_ACCESS_KEY_ID`/
-`AWS_SECRET_ACCESS_KEY`/`AWS_DEFAULT_REGION` environment variables, no `boto3` package
-installed. **This is the one thing standing between this plan and an actual deployment.**
+No `~/.aws/credentials`, no `~/.aws/config`, no `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/
+`AWS_DEFAULT_REGION` environment variables, and `.env` (read directly, with explicit
+authorization, to check) contains no AWS-related variable at all — only VoiceBot/provider
+secrets (Groq, Sarvam, HF, the VoiceBot API key). **This is the one thing standing between
+this plan and an actual deployment.**
 
 To unblock:
-1. Install the AWS CLI v2 in this environment (or provide a machine/session that already
-   has it).
-2. Run `aws configure` with a real IAM user's access key/secret (or provide
+1. Run `aws configure` with a real IAM user's access key/secret (or provide
    `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_DEFAULT_REGION` as environment
    variables) — an IAM user scoped to EC2/EBS/security-group/(optionally)S3 permissions is
    sufficient; the root account credentials should never be used directly for this.
-3. Re-run `aws sts get-caller-identity` to confirm the identity and account before
+2. Re-run `aws sts get-caller-identity` to confirm the identity and account before
    provisioning anything.
 
-Once that succeeds, `deployment/aws/provision.sh` and `deployment/aws/deploy.sh` (§14) are
-ready to execute the plan in this document.
+Once that succeeds, `deployment/aws/provision.sh`, `deployment/aws/first_boot_setup.sh`, and
+`deployment/aws/deploy.sh` (§14) are ready to execute the plan in this document, in that
+order.

@@ -96,6 +96,7 @@ Security group: $SG_ID
 Data volume:    $VOLUME_ID (attached at /dev/xvdf -- format and mount at /data on first boot)
 SSH:            ssh -i ${KEY_PAIR_NAME}.pem ec2-user@$PUBLIC_IP
 
-Next: format and mount the data volume, install Docker, then run deploy.sh.
-See docs/AWS_DEPLOYMENT.md for the HTTPS reverse-proxy setup.
+Next: copy first_boot_setup.sh to the instance and run it as root with
+DOMAIN=<your-domain-pointed-at-$PUBLIC_IP> set -- it formats/mounts /data,
+installs Docker, and installs Caddy for HTTPS. Then run deploy.sh.
 SUMMARY

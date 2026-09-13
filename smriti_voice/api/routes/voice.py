@@ -54,8 +54,14 @@ async def conversation_voice(
     raw = await read_wav_upload(audio_wav, max_bytes=app.config.max_upload_bytes,
                                 max_duration_s=app.config.max_wav_duration_s)
 
-    if language and not app.languages.is_known(language):
-        raise HTTPException(400, f'Unknown language: {language!r}')
+    if language:
+        if not app.languages.is_known(language):
+            raise HTTPException(400, f'Unknown language: {language!r}')
+        # See the same normalization note in api/routes/conversation.py:
+        # without this, a caller-supplied alias like 'hi' never matches the
+        # canonical 'hin' key in the ASR-error text templates and silently
+        # falls back to English.
+        language = app.languages.get(language).code
 
     # Optional: same exactly-once guarantee as the text endpoint, keyed on
     # the raw audio bytes so a client retry of the same recording after a

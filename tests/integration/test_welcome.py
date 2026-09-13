@@ -115,6 +115,22 @@ def test_welcome_endpoint_with_speak_queues_a_tts_job(client, auth_headers):
     assert body['job_status'] == 'QUEUED'
 
 
+def test_welcome_endpoint_speaks_hindi_when_given_the_clients_real_hi_code(client, auth_headers):
+    """Real caregiver/backend clients store the patient's language as a
+    2-letter code ('hi' for Hindi, 'as' for Assamese -- see the actual
+    Supabase `patients.lang_code` column), not VoiceBot's internal 3-letter
+    form ('hin'/'asm'). A request with language='hi' must get the same
+    Hindi greeting a request with language='hin' would, not silently fall
+    back to English because 'hi' never matched the WELCOME_TEXT dict key."""
+    resp = client.post('/v1/conversation/welcome',
+                       json={'user_id': 'demo-user', 'language': 'hi'},
+                       headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['language'] == 'hin'
+    assert 'Hello' not in body['response_text']  # must not be the English template
+
+
 def test_welcome_endpoint_rejects_unauthorized_user(client, auth_headers):
     resp = client.post('/v1/conversation/welcome', json={'user_id': 'someone-else'},
                        headers=auth_headers)

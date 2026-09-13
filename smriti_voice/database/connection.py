@@ -9,6 +9,7 @@ cheap and it removes a whole class of race conditions.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -21,6 +22,16 @@ class Database:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         # An in-memory database must keep one connection alive or it vanishes.
         self._shared: sqlite3.Connection | None = None
+        # Only the shared-connection (':memory:') path needs this: every
+        # other call opens its own connection (see connect() below), so
+        # concurrent threads never touch the same sqlite3.Connection object.
+        # The shared connection is a single object, though, and interleaved
+        # commit()/rollback() calls from concurrent threads against it is a
+        # real, reproducible race (observed as intermittent InterfaceError/
+        # OperationalError failures under concurrent load) -- not merely a
+        # theoretical one. A file-backed database (every real deployment)
+        # never hits this branch at all.
+        self._shared_guard = threading.Lock()
         if self.path == ':memory:':
             self._shared = self._configure(sqlite3.connect(':memory:', check_same_thread=False))
 
@@ -36,12 +47,13 @@ class Database:
     def connect(self) -> Iterator[sqlite3.Connection]:
         """A connection that commits on success and rolls back on failure."""
         if self._shared is not None:
-            try:
-                yield self._shared
-                self._shared.commit()
-            except Exception:
-                self._shared.rollback()
-                raise
+            with self._shared_guard:
+                try:
+                    yield self._shared
+                    self._shared.commit()
+                except Exception:
+                    self._shared.rollback()
+                    raise
             return
         connection = self._configure(sqlite3.connect(self.path, check_same_thread=False,
                                                      timeout=5.0))

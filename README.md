@@ -148,7 +148,9 @@ and none asserts a fabricated provider result.
 - Sarvam tool calling is unverified; the router will not send it a tool-bearing turn unless
   `SARVAM_TOOLS_VERIFIED=1`.
 - Streaming/realtime voice is not implemented — this is request/response.
-- Sessions live in memory; a restart loses in-flight confirmations (durable history is in SQLite).
+- Sessions, pending confirmations, and history are all SQLite-persisted and survive a
+  restart (see `tests/integration/test_persistent_sessions.py`); this replaced an earlier
+  in-memory design.
 
 ## Documents
 
@@ -160,3 +162,8 @@ and none asserts a fabricated provider result.
 | `LANGUAGE_SUPPORT.md` | Generated capability matrix |
 | `EVALUATION.md` | What was tested, what was mocked, what was not tested |
 | `HANDOFF.md` | Integration notes for the app and backend developers |
+| `INTEGRATION_CONTRACT.md` | The verified API contract for the Backend/Flutter teams |
+| `STAGING_READINESS.md` | What is actually demonstrated for pilot/staging, with evidence |
+| `TESTING.md` | The deterministic/mock test mode: what it proves and does not prove |
+| `PROVISIONING_DESIGN.md` | Current pilot provisioning vs. a future scalable design (not implemented) |
+| `CHANGELOG.md` | Notable changes, grouped by theme and dated from git history |

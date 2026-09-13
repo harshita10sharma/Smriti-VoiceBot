@@ -278,10 +278,38 @@ Full detail: `HANDOFF.md`, `BACKEND_APP_DEVELOPER_BACKGROUND.md`. Summary:
   payloads the model sees. `active` follows the same omit-preserves rule as every other
   patient-context field: omitting it never changes the current enabled/disabled state.
 - **No raw phone numbers, ever.** `phone_available: bool` only; any `phone`/`phone_number`/
-  etc. field is rejected with `422` (schema `extra='forbid'`), not silently dropped.
+  etc. field is rejected with `422` (schema `extra='forbid'`), not silently dropped. This
+  flag is a capability hint only — it does **not**, by itself, establish a callable contact.
+  VoiceBot has no telephony executor at all (see §11); nothing dials a number.
+- **`phone_available` has no corresponding column on your real `people`/family-members
+  table** if you are syncing directly from a schema shaped like the one used to verify this
+  contract (`id, name, relationship, photo_path, voice_path, memory_prompt, is_deceased,
+  sort_order` — no phone field anywhere on a person). VoiceBot will not invent one and will
+  not accept `escalation_config.primary_phone`/`secondary_phone` copied onto a person as a
+  substitute — those are patient-level escalation contacts, a different concept, and mixing
+  them would let a general conversational turn imply calling capability that was never
+  actually authorized for that purpose. If/when controlled calling (§9) is enabled, decide
+  the opaque trusted-contact reference jointly rather than repurposing this flag.
 - **Patient timezone actually affects behavior.** "What medicine do I take tonight" resolves
   "tonight" in the synced `timezone`, not a single service-wide default (see
   `tests/unit/test_per_patient_timezone.py`).
+- **Routine time is a `"HH:MM"` 24-hour string, not minutes-from-midnight.** This is
+  deliberately different from how medicines are represented
+  (`chosen_time_min`/`window_start_min`/`window_end_min`, integers 0–1439) — routines have no
+  window to validate, so a plain time-of-day string is the existing, shipped contract for
+  them and is not being changed here. If your source of truth stores routine time as integer
+  minutes (as, for example, a `routine_items.time_min` column would), convert it to
+  `"HH:MM"` before sending — `f"{minutes // 60:02d}:{minutes % 60:02d}"` — as a Backend-side
+  transformation. VoiceBot will not introduce a second routine-time representation to avoid
+  this one, small, always-correct conversion.
+- **`source_revision`/`schema_version` cover every field in the snapshot, not just the three
+  synced arrays.** The revision-conflict check hashes the entire request body (every
+  patient-context field included: `display_name`, `timezone`, `language_code`, `external_id`,
+  `active`), so resending the same `source_revision` with, say, only `timezone` changed and
+  the arrays untouched is correctly detected as a content conflict (`409`), never silently
+  treated as an identical no-op. Verified:
+  `test_same_revision_with_only_a_patient_context_change_is_a_conflict_not_a_silent_noop`,
+  `test_same_revision_with_only_a_display_name_change_is_a_conflict`.
 
 ---
 

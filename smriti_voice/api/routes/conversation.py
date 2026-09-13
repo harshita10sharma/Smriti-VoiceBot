@@ -46,6 +46,13 @@ def conversation(payload: ConversationRequest,
     if language:
         if not app.languages.is_known(language):
             raise HTTPException(400, f'Unknown language: {language!r}')
+        # Normalize once, here, to the internal canonical code (e.g. the
+        # client's own 'hi' -> 'hin') so every downstream language-keyed
+        # lookup (welcome/error/tool-response templates, TTS voice
+        # selection) sees the same code the language packs are keyed by,
+        # instead of silently falling back to English for a caller-supplied
+        # alias that IS a supported language, just spelled differently.
+        language = app.languages.get(language).code
     else:
         language = app.detector.detect(payload.message).language
 
@@ -94,13 +101,20 @@ def welcome(payload: WelcomeRequest,
     if payload.user_id not in authorized:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     ensure_patient_active(app, payload.user_id)
-    if payload.language and not app.languages.is_known(payload.language):
-        raise HTTPException(400, f'Unknown language: {payload.language!r}')
+    language = payload.language
+    if language:
+        if not app.languages.is_known(language):
+            raise HTTPException(400, f'Unknown language: {language!r}')
+        # See the same normalization note in conversation() above: without
+        # this, a caller-supplied alias like 'hi' never matches the
+        # canonical 'hin' key in WELCOME_TEXT and silently gets an English
+        # greeting instead -- the very first thing a patient hears.
+        language = app.languages.get(language).code
 
     try:
         outcome = app.conversation.welcome(user_id=payload.user_id,
                                            session_id=payload.session_id,
-                                           language=payload.language)
+                                           language=language)
     except PermissionError as exc:
         raise HTTPException(403, 'This session does not belong to this user') from exc
 

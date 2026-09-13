@@ -65,9 +65,12 @@ INDIC_PARLER_TTS_LANGUAGES: dict[str, str] = {
     'urd': 'urd',  # Urdu
 }
 
-# Bulbul v2 voices.  A single neutral, calm voice is used for every language;
-# a per-language override belongs in configs once native speakers have chosen one.
-SARVAM_TTS_VOICES: dict[str, str] = {code: 'anushka' for code in SARVAM_TTS_LANGUAGES}
+# Bulbul v3 voices.  'anushka' was a valid v2 speaker but bulbul:v3 rejects it
+# (verified against the live API); 'anand' is confirmed compatible with v3
+# across every language in SARVAM_TTS_LANGUAGES. A single neutral, calm voice
+# is used for every language; a per-language override belongs in configs once
+# native speakers have chosen one.
+SARVAM_TTS_VOICES: dict[str, str] = {code: 'anand' for code in SARVAM_TTS_LANGUAGES}
 
 # Languages the general-purpose cloud LLMs handle well enough for an elderly
 # assistant.  Deliberately conservative: the Northeast low-resource languages are

@@ -55,7 +55,9 @@ class OpenAIASR(BaseASR):
         data={"model":self.model,"temperature":"0"}
         # Only pass a language hint for well-defined ISO-639-1 codes.
         # For low-resource/custom NER codes, omit it and let the multilingual model detect.
-        iso_hints={'eng':'en','hin':'hi','asm':'as','ben':'bn','brx':'brx','mni':'mn','npi':'ne'}
+        # 'mni' (Meiteilon/Manipuri) has no ISO-639-1 two-letter code; 'mn' is
+        # Mongolian, an unrelated language, so it must never be hinted here.
+        iso_hints={'eng':'en','hin':'hi','asm':'as','ben':'bn','brx':'brx','npi':'ne'}
         if language and language in iso_hints and len(iso_hints[language])==2:
             data['language']=iso_hints[language]
         with wav.open("rb") as fh:

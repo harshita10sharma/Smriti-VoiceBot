@@ -54,7 +54,7 @@ That is the honest position, not a bug.
 | ASR online | Sarvam Saaras (`saaras:v4`) | 22 Indic languages + English |
 | ASR offline | AI4Bharat IndicConformer (ONNX) / MWirelabs NE-ASR | 6 packs enabled, 7 benchmark-only |
 | LLM | Groq / Qwen 3.8 27B (deployment default); Gemini / OpenAI / Sarvam / local remain available | Conservative list; Northeast languages excluded pending measurement |
-| TTS | Sarvam Bulbul (`bulbul:v2`) | **10 Indian languages + English only** |
+| TTS | Sarvam Bulbul (`bulbul:v3`) | **10 Indian languages + English only** |
 | Detection | Sarvam auto-detect, NE-LID, Unicode script | — |
 
 ## The Assamese gap

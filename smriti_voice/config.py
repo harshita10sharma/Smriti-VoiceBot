@@ -78,7 +78,7 @@ class ProviderConfig:
     llm_model_groq: str = 'qwen/qwen3.8-27b'
     llm_model_local: str = ''
     tts_provider: str = 'auto'
-    tts_model: str = 'bulbul:v2'
+    tts_model: str = 'bulbul:v3'
     asr_provider: str = 'auto'
     weather_provider: str = 'open-meteo'
     request_timeout_s: float = 20.0
@@ -120,7 +120,7 @@ class ProviderConfig:
             llm_model_groq=_env_str('GROQ_MODEL', 'qwen/qwen3.8-27b'),
             llm_model_local=_env_str('SMRITI_LOCAL_LLM_PATH', ''),
             tts_provider=_env_str('SMRITI_TTS_PROVIDER', 'auto'),
-            tts_model=_env_str('SARVAM_TTS_MODEL', 'bulbul:v2'),
+            tts_model=_env_str('SARVAM_TTS_MODEL', 'bulbul:v3'),
             asr_provider=_env_str('SMRITI_ASR_PROVIDER', 'auto'),
             weather_provider=_env_str('SMRITI_WEATHER_PROVIDER', 'open-meteo'),
             request_timeout_s=_env_float('SMRITI_REQUEST_TIMEOUT_S', 20.0),

@@ -184,3 +184,48 @@ def test_wrapping_medicine_window_is_rejected(client, auth_headers):
 def test_out_of_range_chosen_time_min_is_rejected(client, auth_headers):
     resp = sync(client, auth_headers, medicines=[{'name': 'X', 'chosen_time_min': 1500}])
     assert resp.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# The revision hash must cover every field in the snapshot, not just the
+# three synced arrays -- a caregiver-only field change (timezone, language,
+# display name, active) under the SAME revision number must still be
+# detected as genuinely different content, never silently treated as an
+# identical no-op just because family_members/medicines/daily_routines
+# didn't change.
+# --------------------------------------------------------------------------- #
+def test_same_revision_with_only_a_patient_context_change_is_a_conflict_not_a_silent_noop(
+        client, auth_headers):
+    first = sync(client, auth_headers, source_revision=1, timezone='Asia/Kolkata')
+    assert first.status_code == 200
+    assert first.json()['status'] == 'applied'
+
+    changed_timezone_only = sync(client, auth_headers, source_revision=1,
+                                 timezone='America/New_York')
+    assert changed_timezone_only.status_code == 409
+    assert 'different content' in changed_timezone_only.json()['detail']
+
+
+def test_same_revision_with_only_a_display_name_change_is_a_conflict(client, auth_headers):
+    first = sync(client, auth_headers, source_revision=1, display_name='Original Name')
+    assert first.status_code == 200
+
+    changed_name_only = sync(client, auth_headers, source_revision=1,
+                             display_name='Different Name')
+    assert changed_name_only.status_code == 409
+    assert 'different content' in changed_name_only.json()['detail']
+
+
+def test_same_revision_truly_identical_snapshot_including_context_fields_is_a_noop(
+        client, auth_headers):
+    """The converse guarantee: when every field genuinely matches --
+    including patient-context ones -- it stays a harmless no-op, not a
+    spurious conflict."""
+    payload = {'source_revision': 1, 'timezone': 'Asia/Kolkata',
+              'display_name': 'Identical Name'}
+    first = sync(client, auth_headers, **payload)
+    assert first.status_code == 200
+
+    second = sync(client, auth_headers, **payload)
+    assert second.status_code == 200
+    assert second.json()['status'] == 'no_op'

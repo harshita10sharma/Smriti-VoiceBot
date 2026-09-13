@@ -6,6 +6,7 @@ than lingering with a pending confirmation that could later be answered "yes".
 """
 from __future__ import annotations
 
+import threading
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -122,6 +123,27 @@ class SessionStore:
         self.repo = repository
         self.max_turns = max_turns
         self.idle_timeout_minutes = idle_timeout_minutes
+        # Per-session locks: two requests naming the same session_id (a
+        # rapid double-tap, a client retry racing the original, two
+        # devices sharing a session) must serialize around the
+        # read-mutate-persist cycle in ConversationManager.handle/welcome,
+        # or whichever save() lands last silently overwrites the other's
+        # pending confirmation / last_subject / language -- a lost-update
+        # race, not anything the SQLite layer itself prevents on its own.
+        # A single in-process lock per session_id is correct and sufficient
+        # for the documented single-worker deployment (see SECURITY.md);
+        # it does not protect a future multi-process/multi-worker
+        # deployment, which would need a database-level lock instead.
+        self._locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
+
+    def lock_for(self, session_id: str) -> threading.Lock:
+        with self._locks_guard:
+            lock = self._locks.get(session_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._locks[session_id] = lock
+            return lock
 
     def get_or_create(self, session_id: str | None, user_id: str,
                       language: str = 'eng') -> ConversationSession:

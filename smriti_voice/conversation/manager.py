@@ -230,6 +230,24 @@ class ConversationManager:
     def handle(self, *, user_id: str, message: str, session_id: str | None = None,
                language: str | None = None, request_id: str | None = None,
                offline: bool | None = None) -> ConversationResponse:
+        # A caller-supplied session_id may be shared by two concurrent
+        # requests (a double-tap, a client retry racing the original turn,
+        # two devices on one session) -- serialize those around the whole
+        # read-mutate-persist cycle so neither's pending confirmation /
+        # last_subject / language write is silently lost to the other's.
+        # A brand-new session (no session_id yet) mints its own fresh row
+        # and cannot race with anything, so it skips locking entirely.
+        if session_id:
+            with self.sessions.lock_for(session_id):
+                return self._handle_locked(user_id=user_id, message=message,
+                                           session_id=session_id, language=language,
+                                           request_id=request_id, offline=offline)
+        return self._handle_locked(user_id=user_id, message=message, session_id=session_id,
+                                   language=language, request_id=request_id, offline=offline)
+
+    def _handle_locked(self, *, user_id: str, message: str, session_id: str | None = None,
+                       language: str | None = None, request_id: str | None = None,
+                       offline: bool | None = None) -> ConversationResponse:
         started = time.perf_counter()
         rid = request_id or uuid.uuid4().hex
         session = self.sessions.get_or_create(session_id, user_id,
@@ -289,6 +307,17 @@ class ConversationManager:
         LLM-generated, so this never "fills in" the model's voice with
         something it didn't actually say.
         """
+        if session_id:
+            # Same race as handle(): two concurrent welcome calls (or a
+            # welcome racing a real turn) on the same session_id must not
+            # interleave their read-mutate-save of language/last_active_at.
+            with self.sessions.lock_for(session_id):
+                return self._welcome_locked(user_id=user_id, session_id=session_id,
+                                            language=language)
+        return self._welcome_locked(user_id=user_id, session_id=session_id, language=language)
+
+    def _welcome_locked(self, *, user_id: str, session_id: str | None = None,
+                        language: str | None = None) -> WelcomeOutcome:
         existed_before = bool(session_id) and self.sessions.exists(session_id)
         session = self.sessions.get_or_create(session_id, user_id, language or 'eng')
         restored = existed_before and session.session_id == session_id

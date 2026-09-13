@@ -69,17 +69,18 @@ it — see the evidence column.
 | Backup | **READY** | See DATABASE above |
 | Rollback | **PARTIAL** | Migrations are forward-only and additive; rolling back application code to an older commit against a newer-schema database is untested and not recommended without restoring a matching backup first |
 
-### Deploying on Azure specifically
+### Deployment target: AWS
 
-**See `docs/AZURE_DEPLOYMENT.md` for the full, authoritative Azure deployment plan** —
-recommended service, exact compute tier (with a real measured memory requirement for Indic
-Parler-TTS, which is kept enabled), environment variable matrix, Docker findings, and
-Swagger/OpenAPI verification. The summary below remains accurate but is no longer the primary
-reference.
+**The current deployment target is AWS — see `docs/AWS_DEPLOYMENT.md` for the full,
+authoritative plan**: recommended architecture (EC2 + EBS), exact compute sizing (with a
+real measured memory requirement for Indic Parler-TTS, which is kept enabled), environment
+variable matrix, security, backup/restore, and `deployment/aws/` for the reproducible
+tooling. `docs/AZURE_DEPLOYMENT.md` documents an earlier Azure evaluation and is now
+historical — kept for its reusable technical findings, not as an active deployment path.
 
-Nothing in this repository targets Azure by name today — no Bicep/ARM template, no
-`azure-pipelines.yml`. The considerations below are what the *existing* architecture implies
-for that target, so they are decided before deployment rather than discovered after.
+Nothing in this repository targets a specific cloud provider by name in its own code — the
+considerations below are what the *existing* architecture implies for any deployment target,
+decided before deployment rather than discovered after.
 
 - **SQLite needs a genuinely persistent, single-writer disk path.** Azure App Service's
   local filesystem is not guaranteed persistent across restarts/scale events unless you

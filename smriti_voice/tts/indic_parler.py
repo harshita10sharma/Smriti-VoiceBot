@@ -13,6 +13,7 @@ Configuration via environment variables:
 
 from __future__ import annotations
 
+import concurrent.futures
 import os
 import time
 from typing import Any
@@ -205,14 +206,49 @@ class IndicParlerTTSProvider:
                 self.description, return_tensors='pt'
             ).to(self.device)
 
-            # Generate audio
+            # Generate audio, bounded by self.timeout. The `timeout`
+            # constructor argument was previously accepted but never
+            # actually enforced -- model.generate() has no built-in
+            # wall-clock timeout, and nothing here ever interrupted it, so
+            # a stuck/slow generation blocked the calling voice-job worker
+            # thread indefinitely (this service intentionally runs a
+            # single worker/single synthesis at a time -- see the
+            # Dockerfile -- so a hang here stalls the entire TTS queue,
+            # not just one job). Running the call in a helper thread and
+            # bounding the *wait* with a timeout fixes that: a timeout
+            # here always lets the caller give up and report
+            # ASR/TTS_UNAVAILABLE honestly instead of hanging forever.
+            # Python cannot forcibly kill a running thread, so the
+            # underlying generate() call itself may keep executing in the
+            # background after a timeout is raised -- this bounds how
+            # long the *caller* waits, not the model's own CPU time; a
+            # single stuck generation cannot itself launch a second
+            # concurrent model instance, since this provider's model/
+            # tokenizer state is reused as-is by the one helper thread.
             with torch.no_grad():
-                generation = self._model.generate(
+                # Deliberately NOT a `with ThreadPoolExecutor(...) as executor:`
+                # block: that form's __exit__ calls shutdown(wait=True),
+                # which blocks until the submitted (still-running) call
+                # actually finishes -- silently re-imposing the exact
+                # unbounded wait this fix exists to remove. shutdown(wait=
+                # False) lets the TimeoutError/ProviderTimeout propagate
+                # immediately; the orphaned background thread is a known,
+                # accepted tradeoff (see the comment above), not a bug.
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(
+                    self._model.generate,
                     input_ids=description_inputs.input_ids,
                     attention_mask=description_inputs.attention_mask,
                     prompt_input_ids=prompt_inputs.input_ids,
                     prompt_attention_mask=prompt_inputs.attention_mask,
                 )
+                try:
+                    generation = future.result(timeout=self.timeout)
+                except concurrent.futures.TimeoutError as exc:
+                    executor.shutdown(wait=False)
+                    raise ProviderTimeout(
+                        f'Indic Parler-TTS generation exceeded {self.timeout}s') from exc
+                executor.shutdown(wait=False)
 
             # Extract audio array (shape: [1, samples])
             audio_array = generation.cpu().numpy().squeeze()

@@ -185,7 +185,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/conversation/welcome": {
@@ -261,7 +266,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/conversation/voice": {
@@ -353,7 +363,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/audio/{audio_id}": {
@@ -409,7 +424,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/voice/jobs/{job_id}": {
@@ -467,7 +487,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/voice/jobs/{job_id}/cancel": {
@@ -526,7 +551,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/tools": {
@@ -577,7 +607,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/command": {
@@ -638,7 +673,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     },
     "/v1/memory/sync": {
@@ -698,7 +738,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
       }
     }
   },
@@ -2056,6 +2101,14 @@
           "language"
         ],
         "title": "WelcomeResponse"
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "Server-side credential. Never held by Flutter or a browser; the Backend sends this on every call. See docs/VOICEBOT_INTEGRATION_GUIDE.md §2."
       }
     }
   }

@@ -6,6 +6,46 @@ project has not yet cut a numbered release; entries below are grouped
 under the date each change actually landed, not a version number, since
 none has been assigned yet.
 
+## 2026-09-14 — AWS release pass: response-language honesty, TTS timeout, deployment plan
+
+- Fixed: a deterministic (non-LLM) response with no translated template for
+  the effective language silently reported the originally-requested
+  language while the actual text was plain English (e.g. a welcome
+  greeting requested in Meiteilon returned English text while still
+  reporting `language: "mni"`). Fixed across the welcome, safety-refusal,
+  confirmation, action-reply, deterministic-fallback, and voice ASR-error
+  paths, which all share the same eng/hin/asm/ben-only template set. The
+  requested/session language itself is preserved for later LLM-routed
+  turns; only the one templated response's own reported language is
+  corrected.
+- Fixed: Indic Parler-TTS accepted a `timeout` constructor argument that
+  was never actually enforced — `model.generate()` has no built-in
+  wall-clock bound, so a stuck or slow generation could block the single
+  TTS worker thread indefinitely, stalling the entire voice-job queue.
+  Fixed with a bounded wait around the generation call.
+- Fixed: the health endpoint's `general_conversation` capability checked a
+  hand-maintained provider name list that omitted `groq` entirely — this
+  repository's own primary, documented LLM provider — silently
+  under-reporting the capability on any deployment without also
+  configuring a different listed provider. Fixed to derive from the
+  actual configured-provider set.
+- Fixed a real Dockerfile bug in a prior pass this project and reconfirmed
+  it stayed fixed.
+- Re-verified, against current source rather than an older snapshot, a set
+  of findings from an external integration review: brand-new-patient
+  memory sync, structured medicine-schedule filtering, session ownership
+  after cache eviction, audio expiry at read time, and reminder/call
+  proposal honesty were all already correct in current source and did not
+  need re-fixing.
+- Published `docs/AWS_DEPLOYMENT.md` as the authoritative deployment
+  target (moved from the earlier Azure evaluation, now kept as historical
+  reference) and `deployment/aws/` with reproducible provisioning, deploy,
+  smoke-test, backup/restore, and rollback tooling — none of it executed,
+  since no AWS credentials are configured in this environment.
+- Published `docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md` mapping all
+  19 sections of the integration contract to current implementation
+  status and owner.
+
 ## 2026-09-13 — Zero-signal text no longer overrides an active session's language
 
 - Fixed: a text or voice turn carrying no real language signal (e.g. a

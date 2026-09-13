@@ -1,5 +1,12 @@
 # Azure Deployment — SMRITI VoiceBot
 
+> **HISTORICAL / NOT CURRENT DEPLOYMENT TARGET.** The project's deployment target moved to
+> AWS — see [`AWS_DEPLOYMENT.md`](AWS_DEPLOYMENT.md), the current authoritative deployment
+> reference. This document is kept because its technical analysis (real measured Indic
+> Parler-TTS memory footprint, real provider validation, the Dockerfile bug it found and
+> fixed) remains accurate and reusable regardless of cloud provider — only the
+> Azure-specific resource/service choices below are superseded.
+
 **Status: this is the authoritative deployment reference going forward.** It supersedes the
 Tailscale Funnel/Render-oriented deployment notes in `API_INTEGRATION.md`,
 `BACKEND_APP_DEVELOPER_BACKGROUND.md`, and `render.yaml` for hosting purposes — those remain
@@ -85,7 +92,7 @@ requirement is Indic Parler-TTS, quantified in §5 rather than assumed.
 
 - **Currently used**: yes, actively enabled locally (`SMRITI_INDIC_PARLER_ENABLED=1` in your
   `.env`), covering `asm,brx,mni,npi` — languages with **no Sarvam Bulbul TTS coverage at
-  all** (confirmed: `docs/integration/voicebot-language-matrix.json` shows `tts_online: false`
+  all** (confirmed: `docs/integration/language_matrix.json` shows `tts_online: false`
   for all four via Sarvam). This is not a redundant fallback — for these four languages, it is
   currently the *only* real TTS path that exists.
 - **Loaded lazily**: confirmed by direct observation — the model loads on first synthesis

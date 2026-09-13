@@ -171,5 +171,8 @@ and none asserts a fabricated provider result.
 | `docs/BACKEND_VOICEBOT_INTEGRATION.md` | Step-by-step for the Backend developer building the gateway |
 | `docs/FLUTTER_VOICEBOT_INTEGRATION.md` | Step-by-step for the Flutter developer building the client |
 | `docs/RELEASE_ACCEPTANCE.md` | The final, evidence-cited status of every VoiceBot-owned requirement |
-| `docs/AZURE_DEPLOYMENT.md` | The authoritative Azure deployment plan — service, compute tier, config, Docker/Swagger findings |
+| `docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md` | All 19 integration-contract sections mapped to owner and status |
+| `deployment/aws/` | Reproducible AWS provisioning/deploy/backup/rollback tooling |
+| `docs/AWS_DEPLOYMENT.md` | The authoritative AWS deployment plan — architecture, compute sizing, config, security, backup |
+| `docs/AZURE_DEPLOYMENT.md` | Historical — Azure was evaluated before the target moved to AWS; kept for its reusable technical findings |
 | `docs/integration/` | Machine-readable exports: OpenAPI, memory/action schemas, language matrix, error catalog |

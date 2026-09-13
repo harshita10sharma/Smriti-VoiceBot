@@ -162,6 +162,14 @@ class VoicePipeline:
                 'asm': 'মই একো শুনা নাই। অনুগ্ৰহ কৰি আকৌ কওক।',
                 'ben': 'আমি কিছু শুনতে পাইনি। অনুগ্রহ করে আবার বলুন।'},
         }[code]
+        # These templates only cover eng/hin/asm/ben, same as every other
+        # deterministic response in this codebase (see conversation/prompts
+        # .py::effective_template_language) -- report the language this
+        # text is ACTUALLY in, not the originally-requested one, so a
+        # caller trusting response.language is never told an English
+        # apology is in, say, Meiteilon.
+        from .conversation.prompts import effective_template_language
+        response_language = effective_template_language(language)
         # Every other response path (welcome/conversation/a successful voice
         # turn) always returns a real, PERSISTED session_id -- SessionStore
         # .get_or_create both mints one and writes it to the database
@@ -179,8 +187,8 @@ class VoicePipeline:
         session = self.app.conversation.sessions.get_or_create(session_id, user_id, language)
         resolved_session_id = session.session_id
         return VoiceResponse(
-            request_id=request_id, session_id=resolved_session_id, language=language,
-            response_text=texts.get(language, texts['eng']), kind=TurnKind.ERROR,
+            request_id=request_id, session_id=resolved_session_id, language=response_language,
+            response_text=texts[response_language], kind=TurnKind.ERROR,
             transcript='', audio_available=False, audio_unavailable_reason=code,
             metadata=TurnMetadata(request_id=request_id, session_id=resolved_session_id,
                                   kind=TurnKind.ERROR, execution_mode=ExecutionMode.ERROR,

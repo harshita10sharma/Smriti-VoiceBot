@@ -9,7 +9,7 @@ file/test that proves it.
 - [`docs/BACKEND_VOICEBOT_INTEGRATION.md`](BACKEND_VOICEBOT_INTEGRATION.md) — step-by-step for the Backend developer.
 - [`docs/FLUTTER_VOICEBOT_INTEGRATION.md`](FLUTTER_VOICEBOT_INTEGRATION.md) — step-by-step for the Flutter developer.
 - [`../INTEGRATION_CONTRACT.md`](../INTEGRATION_CONTRACT.md) — the terse, verified reference this guide expands on.
-- [`docs/integration/`](integration/) — machine-readable exports: `openapi.json`, `voicebot-memory-schema.json`, `voicebot-action-schema.json`, `voicebot-language-matrix.json`, `voicebot-error-catalog.json`, all generated from the actual current implementation.
+- [`docs/integration/`](integration/) — machine-readable exports: `openapi.json`, `memory_schema.json`, `action_schema.json`, `language_matrix.json`, `error_catalog.json`, all generated from the actual current implementation.
 - [`../TESTING.md`](../TESTING.md) — what the deterministic test mode proves and does not prove.
 - [`../docs/RELEASE_ACCEPTANCE.md`](RELEASE_ACCEPTANCE.md) — the final status matrix, evidence-cited.
 
@@ -190,7 +190,7 @@ Note `language: "hin"` in the response even though the request could equally hav
 promptly.
 
 **Memory sync** — `POST /v1/memory/sync`: see §11 and
-[`docs/integration/voicebot-memory-schema.json`](integration/voicebot-memory-schema.json)
+[`docs/integration/memory_schema.json`](integration/memory_schema.json)
 for the exact schema.
 
 **Command (legacy)** — `POST /v1/command`: multipart `audio_wav`, `language` (required),
@@ -201,7 +201,7 @@ new integration.
 
 ## 6. Error catalogue
 
-See [`docs/integration/voicebot-error-catalog.json`](integration/voicebot-error-catalog.json)
+See [`docs/integration/error_catalog.json`](integration/error_catalog.json)
 for the machine-readable version. Summary:
 
 | HTTP | Meaning |
@@ -305,7 +305,7 @@ are already naturally idempotent.
 
 ## 11. Memory synchronization
 
-Full schema: [`docs/integration/voicebot-memory-schema.json`](integration/voicebot-memory-schema.json).
+Full schema: [`docs/integration/memory_schema.json`](integration/memory_schema.json).
 Field-by-field mapping guidance for a real Supabase-shaped source: `../INTEGRATION_CONTRACT.md` §6.
 
 - **Full-snapshot, per-category replace.** Send the patient's entire current
@@ -332,7 +332,7 @@ Field-by-field mapping guidance for a real Supabase-shaped source: `../INTEGRATI
 ## 12. Language matrix
 
 Machine-readable, generated from the live registry:
-[`docs/integration/voicebot-language-matrix.json`](integration/voicebot-language-matrix.json).
+[`docs/integration/language_matrix.json`](integration/language_matrix.json).
 Also live at runtime: `GET /v1/languages`.
 
 | Frontend code | VoiceBot code | ASR | LLM | TTS | Status | Notes |
@@ -483,11 +483,10 @@ string, never `str(exc)` or a stack trace.
 ## 20. Deployment
 
 VoiceBot's `x-api-key`/`SMRITI_API_KEYS`/provider-credential model maps directly onto
-whatever secret store your platform uses (environment variables either way). See
-`../STAGING_READINESS.md`'s "Deploying on Azure specifically" section for concrete
-considerations (persistent storage for SQLite, the current single-instance constraint,
-Key Vault/App Settings for secrets). **No secrets are ever written in this document or any
-file in this repository.**
+whatever secret store your platform uses (environment variables either way). The current
+deployment target is AWS — see `docs/AWS_DEPLOYMENT.md` for the full plan (EC2 architecture,
+persistent EBS storage for SQLite, the single-instance constraint, security groups). **No
+secrets are ever written in this document or any file in this repository.**
 
 ## 21. Integration checklist
 

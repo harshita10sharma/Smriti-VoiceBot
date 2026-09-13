@@ -206,6 +206,58 @@ def test_provider_respects_device_configuration(monkeypatch):
         mock_torch.device.assert_called()
 
 
+def test_synthesize_raises_provider_timeout_instead_of_hanging_forever(monkeypatch):
+    """Real, previously-reproduced defect: the `timeout` constructor
+    argument was accepted but never enforced -- model.generate() has no
+    built-in wall-clock bound, so a stuck/slow generation blocked the
+    calling voice-job worker thread indefinitely (this service
+    intentionally runs a single worker/single synthesis at a time, so a
+    hang here stalls the entire TTS queue, not just one job). This test
+    proves synthesize() actually gives up and raises once a genuinely
+    slow generate() call exceeds the configured timeout, instead of
+    waiting for it -- bounded by wall-clock time, not by mocking away the
+    slowness."""
+    import time as time_module
+    from smriti_voice.exceptions import ProviderTimeout
+
+    mock_torch = Mock()
+    mock_torch.device = Mock(return_value=Mock())
+    mock_no_grad_context = Mock()
+    mock_no_grad_context.__enter__ = Mock(return_value=None)
+    mock_no_grad_context.__exit__ = Mock(return_value=False)
+    mock_torch.no_grad = Mock(return_value=mock_no_grad_context)
+
+    with patch.dict('sys.modules', {'torch': mock_torch, 'transformers': Mock(),
+                                    'parler_tts': Mock()}):
+        provider = IndicParlerTTSProvider(timeout=0.2)  # deliberately short
+
+        mock_tokenizer_output = Mock()
+        mock_tokenizer_output.to.return_value = mock_tokenizer_output
+        mock_tokenizer_output.input_ids = Mock()
+        mock_tokenizer_output.attention_mask = Mock()
+        provider._tokenizer = Mock(return_value=mock_tokenizer_output)
+        provider._description_tokenizer = Mock(return_value=mock_tokenizer_output)
+
+        def _slow_generate(*args, **kwargs):
+            time_module.sleep(2.0)  # genuinely longer than the 0.2s timeout
+            return Mock()
+
+        provider._model = Mock()
+        provider._model.generate = Mock(side_effect=_slow_generate)
+
+        started = time_module.perf_counter()
+        with pytest.raises(TTSError) as exc_info:
+            provider.synthesize('test', 'asm')
+        elapsed = time_module.perf_counter() - started
+
+        # Bounded by the configured timeout, not by the mocked 2s delay --
+        # this is the actual behavior being verified, not merely that an
+        # exception type was raised.
+        assert elapsed < 1.5
+        assert 'timeout' in str(exc_info.value).lower() \
+            or 'exceeded' in str(exc_info.value).lower()
+
+
 def test_provider_returns_false_when_not_enabled(monkeypatch):
     """Test that the provider is not available when disabled."""
     monkeypatch.setenv('SMRITI_INDIC_PARLER_ENABLED', 'false')

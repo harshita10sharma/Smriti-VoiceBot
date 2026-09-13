@@ -37,8 +37,17 @@ def build_health(*, config: AppConfig, languages: LanguageService, llm: LLMRoute
         'capabilities': {
             'deterministic_commands': True,
             'personal_memory': True,
-            'general_conversation': any(llm_providers.get(name) for name in
-                                        ('gemini', 'openai', 'sarvam', 'local')),
+            # Any real (non-mock, non-local) provider being buildable counts
+            # as general conversation capability -- derived from the actual
+            # llm_providers dict rather than a hand-maintained name list, so
+            # a real, already-primary provider (previously 'groq' was
+            # missing here entirely, silently under-reporting this
+            # capability on any deployment that hadn't also configured a
+            # different provider from the old fixed list) can never again
+            # be silently omitted just because this file wasn't updated
+            # when a provider was added elsewhere.
+            'general_conversation': any(configured for name, configured in llm_providers.items()
+                                        if name not in ('local', 'mock')),
             'offline_general_conversation': llm_providers.get('local', False),
             # True only if a provider is configured AND some language can be spoken.
             'voice_output': (any(tts_providers.get(name) for name in ('sarvam', 'local', 'indic_parler'))

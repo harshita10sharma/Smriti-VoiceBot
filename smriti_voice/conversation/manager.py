@@ -49,7 +49,7 @@ from ..tools.registry import ToolContext, ToolRegistry
 from .classifier import classify_topic
 from .context import ConversationSession, SessionStore
 from .policy import DeterministicResponder
-from .prompts import build_system_prompt, untrusted_block
+from .prompts import build_system_prompt, effective_template_language, untrusted_block
 
 log = get_logger('conversation')
 
@@ -189,6 +189,14 @@ class TurnOutcome:
     error_code: str | None = None
     topic: str | None = None
     action_id: str | None = None
+    # None means "this turn's response is genuinely in turn_language" (the
+    # LLM path, which was actually instructed to answer in that language --
+    # whether it succeeds is a model-quality question tracked separately,
+    # not a metadata-honesty one). A deterministic (non-LLM) response that
+    # had to fall back to English because no translated template exists
+    # sets this explicitly via effective_template_language(), so the final
+    # response never claims a language its text isn't actually in.
+    response_language: str | None = None
 
 
 class ConversationManager:
@@ -263,7 +271,16 @@ class ConversationManager:
         session.add_turn('user', message, language=turn_language)
         outcome = self._route(message, session=session, principal=principal,
                               language=turn_language, request_id=rid, offline=is_offline)
-        session.add_turn('assistant', outcome.text, language=turn_language, kind=outcome.kind)
+        # The response's actual language: turn_language for an LLM-routed
+        # reply (it was genuinely instructed to answer in that language),
+        # or whatever a deterministic template fell back to when no
+        # translation for turn_language exists -- see TurnOutcome.response_
+        # language and effective_template_language(). Used for both the
+        # persisted history entry and the returned response so neither
+        # claims a language the text isn't actually in.
+        response_language = outcome.response_language or turn_language
+        session.add_turn('assistant', outcome.text, language=response_language,
+                         kind=outcome.kind)
 
         mode = (ExecutionMode.OFFLINE_PRIMARY if is_offline and outcome.llm_provider == 'local'
                 else ExecutionMode.DEGRADED if outcome.kind is TurnKind.FALLBACK
@@ -287,7 +304,7 @@ class ConversationManager:
 
         return ConversationResponse(
             request_id=rid, session_id=session.session_id, response_text=outcome.text,
-            language=turn_language, kind=outcome.kind, action=outcome.action,
+            language=response_language, kind=outcome.kind, action=outcome.action,
             action_accepted=outcome.action_accepted, tool_calls=outcome.tool_calls,
             tool_results=outcome.tool_results, safety=outcome.safety,
             requires_confirmation=outcome.requires_confirmation, metadata=metadata)
@@ -327,8 +344,13 @@ class ConversationManager:
         self.sessions.save(session)  # persist a language change, if any
         user = self.memory.repo.get_user(user_id)
         text = _welcome_text(turn_language, user.display_name if user else None)
+        # session.language stays the patient's actual requested/detected
+        # language (so a later real LLM-routed turn still attempts it) --
+        # only the RESPONSE's own language field is downgraded to what the
+        # greeting text is actually in, when no translated template exists.
         return WelcomeOutcome(session_id=session.session_id, text=text,
-                              language=turn_language, restored=restored)
+                              language=effective_template_language(turn_language),
+                              restored=restored)
 
     # ------------------------------------------------------------------ #
     def _route(self, message: str, *, session: ConversationSession, principal: Principal,
@@ -342,7 +364,8 @@ class ConversationManager:
                 text=refusal_text('safety_override', language), kind=TurnKind.REFUSAL,
                 safety=SafetyDecision(allowed=False, reason='prompt_injection',
                                       category='prompt_injection',
-                                      refusal_key='safety_override', matched=patterns))
+                                      refusal_key='safety_override', matched=patterns),
+                response_language=effective_template_language(language))
 
         # 2. Deterministic safety screen, before any model.
         verdict = self.policy.screen_utterance(message)
@@ -350,7 +373,8 @@ class ConversationManager:
             log.info('utterance_refused', fields={'request_id': request_id,
                                                   'category': verdict.category})
             return TurnOutcome(text=refusal_text(verdict.refusal_key, language),
-                               kind=TurnKind.REFUSAL, safety=verdict)
+                               kind=TurnKind.REFUSAL, safety=verdict,
+                               response_language=effective_template_language(language))
 
         # 3. A pending confirmation takes priority over everything else.
         if session.pending is not None:
@@ -394,19 +418,22 @@ class ConversationManager:
             contact = self.memory.trusted_contact(principal.user_id)
             if contact is None:
                 return TurnOutcome(text=refusal_text('unknown_number', language),
-                                   kind=TurnKind.REFUSAL)
+                                   kind=TurnKind.REFUSAL,
+                                   response_language=effective_template_language(language))
             pending = self.confirmations.create(
                 action=Action.CALL_PRIMARY_CONTACT.value, language=language,
                 tool_name='call_family_member', arguments={'name': contact.name},
                 name=contact.name)
             session.set_pending(pending)
             return TurnOutcome(text=pending.prompt, kind=TurnKind.CONFIRMATION,
-                               requires_confirmation=True, action_id=pending.action_id)
+                               requires_confirmation=True, action_id=pending.action_id,
+                               response_language=effective_template_language(language))
 
         reply = _text_for(ACTION_REPLIES, granted.action.value, language) or \
             ACTION_REPLIES[Action.HELP.value]['eng']
         return TurnOutcome(text=reply, kind=TurnKind.COMMAND, action=granted.action.value,
-                           action_accepted=True)
+                           action_accepted=True,
+                           response_language=effective_template_language(language))
 
     # ------------------------------------------------------------------ #
     def _resolve_confirmation(self, message: str, *, session: ConversationSession,
@@ -419,19 +446,22 @@ class ConversationManager:
         if decision == 'cancelled':
             session.set_pending(None)
             return TurnOutcome(text=cancellation_text(language), kind=TurnKind.CONFIRMATION,
-                               action_id=pending.action_id)
+                               action_id=pending.action_id,
+                               response_language=effective_template_language(language))
 
         if decision == 'unclear':
             # Never treat an ambiguous reply as a yes. Ask once more.
             return TurnOutcome(text=_text_for(CONFIRM_AGAIN, language, language)
                                or CONFIRM_AGAIN['eng'],
                                kind=TurnKind.CONFIRMATION, requires_confirmation=True,
-                               action_id=pending.action_id)
+                               action_id=pending.action_id,
+                               response_language=effective_template_language(language))
 
         session.set_pending(None)
         if not pending.tool_name:
             return TurnOutcome(text=cancellation_text(language), kind=TurnKind.CONFIRMATION,
-                               action_id=pending.action_id)
+                               action_id=pending.action_id,
+                               response_language=effective_template_language(language))
 
         context = self._context(language=language, request_id=request_id,
                                 session_id=session.session_id, principal=principal)
@@ -449,7 +479,8 @@ class ConversationManager:
         text = self._confirmation_done_text(result, language)
         return TurnOutcome(text=text, kind=TurnKind.CONFIRMATION, action=action,
                            action_accepted=accepted, tool_results=[result],
-                           tool_latency_ms=result.latency_ms, action_id=pending.action_id)
+                           tool_latency_ms=result.latency_ms, action_id=pending.action_id,
+                           response_language=effective_template_language(language))
 
     @staticmethod
     def _confirmation_done_text(result: ToolResult, language: str) -> str:
@@ -558,7 +589,8 @@ class ConversationManager:
                                        tool_calls=tool_calls, tool_results=tool_results,
                                        requires_confirmation=True, llm_provider=provider,
                                        llm_latency_ms=llm_latency, tool_latency_ms=tool_latency,
-                                       topic=topic, action_id=pending.action_id)
+                                       topic=topic, action_id=pending.action_id,
+                                       response_language=effective_template_language(language))
 
                 payload = (result.data if result.ok else
                            {'error': result.error, 'error_code': result.error_code})
@@ -602,7 +634,8 @@ class ConversationManager:
             if members:
                 session.last_subject = members[0].get('name')
         return TurnOutcome(text=answer.text, kind=TurnKind.FALLBACK, fallback_used=True,
-                           error_code=None if answer.answered else 'NO_GENERAL_AI_AVAILABLE')
+                           error_code=None if answer.answered else 'NO_GENERAL_AI_AVAILABLE',
+                           response_language=effective_template_language(language))
 
     # ------------------------------------------------------------------ #
     def _persist(self, session: ConversationSession, message: str, outcome: TurnOutcome,
@@ -615,7 +648,8 @@ class ConversationManager:
                                       language=session.language, kind='USER')
             self.memory.repo.add_turn(turn_id=uuid.uuid4().hex, session_id=session.session_id,
                                       user_id=session.user_id, role='assistant',
-                                      text=outcome.text, language=session.language,
+                                      text=outcome.text,
+                                      language=outcome.response_language or session.language,
                                       kind=outcome.kind.value)
         except Exception as exc:  # persistence must never break a live turn
             log.warning('turn_persist_failed', fields={'request_id': metadata.request_id,

@@ -49,7 +49,7 @@ POST /v1/memory/sync
 
 ## 5. Build the VoiceBot memory snapshot
 
-Full schema: [`integration/voicebot-memory-schema.json`](integration/voicebot-memory-schema.json).
+Full schema: [`integration/memory_schema.json`](integration/memory_schema.json).
 Pull from your `get_patient_content(p_patient_id)` RPC (or equivalent), then whitelist —
 never forward the raw RPC response, which includes private escalation data VoiceBot must
 never see:
@@ -182,7 +182,7 @@ for yours.
 
 ## 16. Handle 401/403/404/409/413/422/429/5xx
 
-See [`integration/voicebot-error-catalog.json`](integration/voicebot-error-catalog.json)
+See [`integration/error_catalog.json`](integration/error_catalog.json)
 for the full table. Practically:
 - `401`/`503` — your own configuration is broken (bad/missing credential); alert, don't
   surface to the patient.

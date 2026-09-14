@@ -111,15 +111,45 @@ A fixed-window rate limiter (default 60/min) sits on the same dependency.
 ## Secrets
 
 - Credentials come from the environment only. Nothing is hard-coded.
-- The Groq, Gemini, OpenAI, Sarvam and Hugging Face provider keys remain server-side only.
-- `.env` is git-ignored; `.env.example` carries empty placeholders.
+- The Groq, Gemini, OpenAI, Sarvam and Hugging Face provider keys remain server-side only —
+  never returned by any endpoint, never forwarded to a client.
+- The VoiceBot `x-api-key` credential itself is likewise server-side only: the Backend
+  holds it and calls VoiceBot on the app's behalf. **It must never reach Flutter or a
+  browser** — Flutter talks only to the Backend, never to VoiceBot directly with a secret.
+- `.env` is git-ignored; `.env.example` carries empty placeholders. `*.pem` (the AWS EC2
+  SSH key) is also git-ignored.
 - `/v1/health` and `--test-config` report credentials as **booleans**, never values.
 - Provider error bodies are redacted before they are surfaced, because they can echo the
   request.
-- Verified: no tracked file contains `sk_…`, `AIza…` or a private key block.
+- Verified: no tracked file contains `sk_…`, `AIza…`, `gsk_…`, `hf_…` or a private key
+  block — including a scan of the full git history, not just the working tree.
+- A credential accidentally displayed in a tool/session transcript during development
+  (`SMRITI_API_KEY`, `GROQ_API_KEY`, `SARVAM_API_KEY`, `HF_TOKEN`) was rotated and
+  redeployed; the old values no longer work.
 
-**Note for this repository's owner:** the archive uploaded during development contained a
-live `SARVAM_API_KEY` in a `.env` file. It was not committed, but it should be rotated.
+## Integration-boundary trust rules
+
+These apply specifically to the Backend/Flutter integration and are worth stating
+explicitly, not just implied by the sections above:
+
+- **A caller-supplied `user_id` is never trusted without authorization.** It must equal (or
+  be a member of) the identity/identities bound to the presented `x-api-key`, or the
+  request is `403` — regardless of what the caller claims.
+- **`action_accepted: true` does not mean a side effect completed.** It means the
+  deterministic authorization layer (safety screen + tool registry, never the model)
+  approved the proposed action. No real telephony or reminder-scheduling executor exists in
+  this repository, by design — a Backend/Flutter-built executor is what would turn an
+  accepted action into a real-world effect, and its own success/failure must be reported
+  honestly, never assumed.
+- **Transcript or model output is never directly executable.** Only an allow-listed action
+  string from the tool registry can trigger a side effect, and only after passing schema
+  validation, the deterministic safety screen, and authorization — see
+  `smriti_voice/tools/registry.py::execute()`.
+- **Audio and voice-job ownership is enforced identically everywhere.** A job or audio id
+  that doesn't belong to the requesting credential's patient(s) returns `404` — the same
+  shape as a nonexistent id, so ownership can never be probed for.
+- **Logs must never contain** secrets, raw audio, full transcripts, or full memory
+  payloads — verified by `tests/unit/test_privacy_data_minimization.py`.
 
 ## Known limitations
 

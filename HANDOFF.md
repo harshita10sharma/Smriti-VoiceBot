@@ -1,6 +1,65 @@
 # Smriti VoiceBot handoff
 
-## What the app developer needs
+Practical integration handoff for the Backend and Flutter teams. Current live deployment:
+`https://15-206-144-216.nip.io` (see `docs/AWS_DEPLOYMENT.md`). For a narrative
+walkthrough, use `docs/VOICEBOT_INTEGRATION_GUIDE.md`; this document is the detail-level
+reference, organized A–Q:
+
+**A.** Backend responsibilities · **B.** Flutter responsibilities · **C.** VoiceBot
+responsibilities · **D.** Authentication · **E.** Patient identity · **F.** Memory
+synchronization · **G.** Text request · **H.** Voice request · **I.** TTS polling ·
+**J.** Cancellation · **K.** Audio retrieval · **L.** Confirmation flow · **M.** Action
+execution boundary · **N.** Idempotency · **O.** Error handling · **P.** Security rules ·
+**Q.** [Final E2E checklist](#q-final-e2e-checklist)
+
+## A. Backend responsibilities
+
+Flutter/device authentication, Supabase patient authorization, mapping the Supabase
+patient UUID to VoiceBot's `user_id` (no translation needed — send the UUID directly),
+holding the VoiceBot `x-api-key` credential server-side, calling VoiceBot on the app's
+behalf, pushing caregiver data into VoiceBot via `POST /v1/memory/sync` with
+revision/retry handling, proxying/scoping job and audio access, whitelisting which fields
+get synced (never forward Supabase's complete private content response), rollout/feature
+flags. **Must not** duplicate VoiceBot's ASR/LLM/TTS/safety/memory logic.
+
+## B. Flutter responsibilities
+
+Recording, calling the Backend (never VoiceBot directly with a secret), displaying
+`response_text`, polling/cancelling voice jobs through the Backend proxy, playback,
+alarm/media priority over AI audio, offline/network-loss behavior, re-pairing, rejecting
+obsolete results (a late job response for a session the user has already left).
+
+## C. VoiceBot responsibilities
+
+ASR, conversation routing, personal memory, deterministic safety, prompt-injection
+handling, action proposal/validation/confirmation, TTS, voice jobs, temporary audio,
+language capability reporting, its own API/deployment security. See `ARCHITECTURE.md`.
+
+## D. Authentication
+
+Every endpoint except `GET /v1/health` and `GET /v1/languages*` requires an `x-api-key`
+header — **never `Authorization: Bearer`**. The credential is server-side only: Backend
+holds it and calls VoiceBot on the app's behalf; it must never reach Flutter or a browser.
+Missing/invalid key → `401`. No key configured on the server at all → `503` (fails closed,
+never opens access). A caller-supplied `user_id` that isn't authorized for the presented
+key → `403` — see **E** below. Generate a credential with
+`python -m smriti_voice.api.generate_key`.
+
+## F. Memory synchronization
+
+See `API_INTEGRATION.md`'s "Endpoint: caregiver memory sync" section for the full request/
+response schema, including the optional `source_revision`/`schema_version` fields that
+enable stale-revision rejection, same-revision-conflict rejection, and idempotent
+identical-revision replay (all three verified live against the deployment above).
+
+---
+
+## Historical: v4.1 on-device bundling notes
+
+The following describes the **original v4.1 on-device deployment model** (the Python
+service bundled directly on the device, no HTTP API, no AWS deployment) — kept for
+historical reference, not the current integration path. The current path is the HTTP API
+documented throughout this file and in `API_INTEGRATION.md`.
 
 1. Bundle the Python service on the device/server OR call the HTTP service.
 2. Send `language` explicitly from the caregiver profile. Do not silently guess a language.
@@ -13,30 +72,13 @@
 6. Never expose an arbitrary transcript as an executable command.
 7. Keep medicine editing outside voice commands.
 
-## What the web/backend developer needs
+`SMRITI_PROVISIONING` unset/0 plus a pre-installed model pack was the original offline,
+no-HTTP-API deployment mode. It is not how the current live deployment runs.
 
-- Optional `SMRITI_API_KEY` for HTTP authentication.
-- `GET /v1/health`
-- `GET /v1/languages`
-- `POST /v1/command` multipart fields: `audio_wav`, `language`, optional `request_id`.
-
-## Offline rule
-
-The production runtime must have `SMRITI_PROVISIONING` unset/0 and must have the model pack already installed.
-No cloud request is made by the voice engine. Provisioning is a separate operation performed before deployment.
-
-## Updating later
-
-Language phrases are edited in `language_packs/commands_<code>.json`.
-Model providers/IDs are edited in `language_packs/ner_languages.json`.
-After an update, run:
-
-```bash
-python tools/validate_packs.py
-pytest -q
-```
-
-Then run the native-speaker regression suite before distributing the new pack.
+Language phrases are edited in `language_packs/commands_<code>.json`. Model providers/IDs
+are edited in `language_packs/ner_languages.json`. After an update, run
+`python tools/validate_packs.py && pytest -q`, then the native-speaker regression suite
+before distributing the new pack.
 
 ---
 
@@ -44,9 +86,13 @@ Then run the native-speaker regression suite before distributing the new pack.
 
 The v4.1 contract above is unchanged. `/v1/command` still takes the same multipart fields
 and returns the same body, and the action strings are the same. The only difference is
-that it now requires the `x-api-key` header like every other protected endpoint.
+that it now requires the `x-api-key` header like every other protected endpoint. **New
+integrations should use `/v1/conversation`/`/v1/conversation/voice` below, not
+`/v1/command`** — see `API_INTEGRATION.md`'s legacy-endpoint note.
 
-## New endpoints for the app developer
+## E. Patient identity & new endpoints for the app developer
+
+### G. Text request
 
 **Text turn** (use this to test without audio):
 
@@ -55,6 +101,8 @@ POST /v1/conversation
 x-api-key: <server key>
 {"user_id": "elder-1", "session_id": "abc123", "message": "What is my daughter's name?", "language": "eng"}
 ```
+
+### H. Voice request
 
 **Voice turn:**
 
@@ -101,11 +149,12 @@ original result without re-running anything (safe against double-executing a con
 action like a phone call); the same key with a different body is rejected with `409`. Omit
 the header entirely and nothing changes from the behavior above.
 
-**A disabled patient** (set by the backend/caregiver system, not by any VoiceBot API)
-returns `403` on every patient-scoped endpoint, the same shape as an unauthorized
-`user_id`. There is no VoiceBot endpoint to disable a patient yet — see SECURITY.md.
+**A disabled patient** — set `"active": false` in a `POST /v1/memory/sync` call for that
+`user_id` (no separate admin endpoint) — returns `403` on every patient-scoped endpoint
+afterward, the same shape as an unauthorized `user_id`. Re-enable with `"active": true`.
+Verified live: `tests/integration/test_patient_lifecycle.py`.
 
-## Rules that have not changed
+## M. Action execution boundary — rules that have not changed
 
 1. Execute only the allow-listed action strings, only when `action_accepted` is true.
 2. Never execute transcript text, model text, a URL or a shell command.
@@ -119,7 +168,7 @@ returns `403` on every patient-scoped endpoint, the same shape as an unauthorize
 Each state needs an obvious visual: a large microphone indicator when listening, simple
 motion when processing, a speaker indicator when speaking.
 
-## Confirmation flow
+## L. Confirmation flow
 
 ```
 turn 1  "How do I call Bina?"  → requires_confirmation=true, action=NO_ACTION
@@ -129,7 +178,7 @@ turn 2  "Yes"                  → action=CALL_PRIMARY_CONTACT, action_accepted=
 
 Anything other than a clear yes leaves the action pending. Never auto-confirm on a timeout.
 
-## Voice job lifecycle
+## I. TTS polling — voice job lifecycle
 
 States: `queued` → `processing` → one of `completed` / `failed` / `cancelled`. There is no
 separate `expired` job state — a job that completed keeps reporting `completed` (that is
@@ -170,7 +219,7 @@ GET  /v1/audio/{audio_id}                   → fetch once, promptly
   ASR/conversation/TTS-job-creation; the same key with different content returns **409**.
   Concurrent duplicate submissions with the same key never create two jobs.
 
-## Audio format
+## K. Audio retrieval — WAV upload format
 
 What `POST /v1/conversation/voice` and `POST /v1/command` actually enforce today, exactly —
 not what might be ideal:
@@ -188,6 +237,8 @@ Rejections: empty payload → **400**; not a valid/parseable WAV, or wrong conte
 **415**; over the byte or duration limit → **413**.
 
 ## Language capability matrix (verified against this repository's actual code, not assumed)
+
+(See also `LANGUAGE_SUPPORT.md` for the generated, always-current version of this table.)
 
 | Product code | Internal code | ASR | LLM conversation | Deterministic fallback | TTS | Real validation evidence |
 |---|---|---|---|---|---|---|
@@ -223,13 +274,64 @@ best-effort, (b) invest in measuring and validating quality for these languages,
 an explicit block if unvalidated attempts are undesirable for your product — none of the
 three is implemented today; this is a decision, not a bug.
 
-## Backend developer notes
+## J. Cancellation
+
+`POST /v1/voice/jobs/{job_id}/cancel` — see "I. TTS polling" above for full semantics
+(race-safety, ownership, what happens if the job already completed). Verified live.
+
+## N. Idempotency
+
+`Idempotency-Key` header (≤128 chars) on `POST /v1/conversation`/`/v1/conversation/voice`
+— same key + same body returns the original result without re-running anything; same key +
+different body → `409`. See "I. TTS polling" above for the voice-specific detail
+(concurrent duplicate submissions never create two jobs).
+
+## O. Error handling
+
+`400` malformed/empty input, `401` missing/invalid key, `403` cross-patient/unauthorized/
+disabled, `404` unknown job/audio (identical shape to "not yours" — no probing signal),
+`409` idempotency conflict, `413` over size/duration limit, `415` not a valid/parseable
+WAV, `429` rate limited, `503` server not configured. Every error body is
+`{"error": "CODE", "detail": "..."}` — never a raw exception string. See "K. Audio
+retrieval" above for the WAV-specific rejection codes.
+
+## P. Security rules — backend developer notes
 
 - Set `SMRITI_API_KEY`. Without it, protected endpoints return **503** by design.
 - Never set `SMRITI_ALLOW_UNAUTHENTICATED=1` on anything network-facing.
-- Provider keys live on the server only — never in the APK or in browser JavaScript.
+- Provider keys (Groq/Sarvam/HF) live on the server only — never in the APK or in browser
+  JavaScript, and never forwarded in any VoiceBot response.
+- The VoiceBot `x-api-key` credential itself must never reach Flutter or a browser either —
+  Backend calls VoiceBot server-to-server only.
+- A caller-supplied `user_id` is never trusted without authorization — it must match (or
+  be a member of) the identities bound to the presented key, or the request is `403`.
+- Job/audio ownership is enforced the same way everywhere: a wrong-patient id is `404`,
+  identical to a nonexistent one.
+- Transcript/model output is never directly executable — only the allow-listed action
+  strings, only when `action_accepted` is true (see **M** above).
+- `action_accepted: true` is not proof a side effect actually happened — no real calling or
+  reminder-scheduling executor exists in this repository today.
+- Logs never contain secrets, raw audio, full transcripts, or full memory payloads —
+  `tests/unit/test_privacy_data_minimization.py`.
 - `GET /v1/health` reports capabilities and credential presence as booleans, never values.
 - `GET /v1/languages` returns the capability matrix; use it to decide whether to offer
-  voice output for a given language.
+  voice output for a given language — and note `validated` is a separate, currently-false-
+  for-everything field, not implied by a provider being configured.
+
+## Q. Final E2E checklist
+
+Run against a real deployment (not mocks) before calling integration complete:
+
+- [ ] Real patient UUID → `POST /v1/memory/sync` (provisions) → authorized text turn succeeds
+- [ ] Unknown/unauthorized UUID → `403`
+- [ ] Disabled patient (`active:false`) → `403` on every subsequent call
+- [ ] Memory round-trip: sync a person → ask about them → correct answer
+- [ ] Stale revision → rejected; conflicting same-revision → rejected; identical replay → no-op
+- [ ] Full voice flow: record → Backend → VoiceBot → job → poll → audio → playback
+- [ ] Cancellation mid-job leaves no audio behind
+- [ ] Network loss during polling → Flutter recovers/resumes without duplicating the request
+- [ ] VoiceBot credential never appears in any Flutter-visible response
+- [ ] Physical device, real human speech (not synthetic) — **not yet run; requires a real
+      device and a working Backend + Flutter**
 - The database is SQLite at `SMRITI_DB_PATH`. The caregiver app is the source of truth for
   family, medicines, appointments and routine — write those rows with `source='caregiver'`.

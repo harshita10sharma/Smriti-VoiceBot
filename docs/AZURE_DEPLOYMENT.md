@@ -7,10 +7,12 @@
 > fixed) remains accurate and reusable regardless of cloud provider — only the
 > Azure-specific resource/service choices below are superseded.
 
-**Status: this is the authoritative deployment reference going forward.** It supersedes the
-Tailscale Funnel/Render-oriented deployment notes in `API_INTEGRATION.md`,
-`BACKEND_APP_DEVELOPER_BACKGROUND.md`, and `render.yaml` for hosting purposes — those remain
-as historical/local references, clearly marked as such.
+**Status: historical.** At the time this document was written, it superseded the Tailscale
+Funnel/Render-oriented deployment notes in `API_INTEGRATION.md`,
+`BACKEND_APP_DEVELOPER_BACKGROUND.md`, and `render.yaml` for hosting purposes. It has since
+itself been superseded by `AWS_DEPLOYMENT.md` — see the banner above. All three earlier
+documents' hosting sections have since been updated to point at the current AWS deployment
+directly.
 
 **Every claim below reflects the actual current codebase, verified this session** — real
 provider calls (Groq, Sarvam ASR, Sarvam TTS, Indic Parler-TTS) against the real `.env`

@@ -1,9 +1,42 @@
 # Codebase status
 
-**Version:** 5.0.0 · **Date:** 2026-09-05
+**Version:** 5.0.0 · **Date:** 2026-09-05 (original), updated 2026-09-15
 
 Status of every major component, stated precisely. Where something is unverified, this
 document says so rather than implying it works.
+
+## Current status — 2026-09-15
+
+The **280 passed** figure in "Verification performed" below, and every count/date further
+down this document, is a **historical snapshot from 2026-09-05** — preserved as-is, not
+updated in place, because it recorded real evidence at that time. It is not the current
+state. The current verified state:
+
+| Check | Result |
+|---|---|
+| `pytest -q` | **625 passed, 0 failed** |
+| `tests/integration/test_memory_sync_versioning.py` | 17/17 passed |
+| `python -m compileall -q .` | clean |
+| `python tools/validate_config.py` | 0 errors |
+| `python tools/validate_packs.py` | 15/15 valid |
+| Deployment shell scripts (`deployment/aws/*.sh`) | `bash -n` clean |
+| Live deployment | `https://15-206-144-216.nip.io` — AWS `ap-south-1`, EC2 `m7i-flex.large`, Docker + Caddy HTTPS, persistent EBS, survives reboot |
+| Real Groq/Qwen | Verified live |
+| Real Sarvam ASR | Verified live |
+| Real Sarvam TTS | Verified live |
+| Real Indic Parler-TTS | Verified live (asm), including a real measured memory/latency profile |
+| Async voice jobs, cancellation, audio retrieval | Verified live |
+| Memory sync (apply, stale-rejection, conflict-rejection, no-op replay) | Verified live |
+| Patient isolation (401/403) | Verified live |
+| Restart and full instance reboot recovery | Verified live |
+| Credential rotation (`SMRITI_API_KEY`, then Groq/Sarvam/HF) | Verified live |
+
+See `docs/RELEASE_ACCEPTANCE.md` for the full evidence-cited matrix and
+`docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md` for the 19-section contract mapping.
+**Backend gateway and Flutter client integration remain external and unbuilt** — VoiceBot
+is ready for Backend integration; cross-system integration is not complete.
+
+---
 
 ## Legend
 

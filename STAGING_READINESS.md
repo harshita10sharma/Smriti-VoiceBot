@@ -7,6 +7,20 @@ known real limitation) · **BLOCKED** (does not exist) · **REQUIRES BACKEND** �
 Nothing below is marked READY without a concrete test, file, or command that demonstrates
 it — see the evidence column.
 
+## Overall status
+
+```
+VoiceBot service:            READY FOR BACKEND INTEGRATION
+Backend gateway:             PENDING
+Flutter:                     PENDING
+Physical-device E2E:         PENDING
+Native language validation:  PENDING
+```
+
+This is not a claim that the SMRITI product is production-ready — only that VoiceBot's own
+side of the integration boundary is done, tested, and live. See `docs/RELEASE_ACCEPTANCE.md`
+for the evidence-cited breakdown of every item above.
+
 ---
 
 ## AUTH

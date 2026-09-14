@@ -10,6 +10,7 @@ No row below is marked PASS without a concrete test, file, or command that demon
 
 | Area | Status | Evidence |
 |---|---|---|
+| **Live AWS deployment** | **PASS** | `https://15-206-144-216.nip.io` — real EC2 (`m7i-flex.large`, `ap-south-1`), real Let's Encrypt HTTPS via Caddy, persistent EBS, verified to survive both a container restart and a full instance reboot. Real Groq/Sarvam/Indic Parler, async voice jobs, cancellation, audio retrieval, memory sync, and patient isolation all verified live against this deployment. See `docs/AWS_DEPLOYMENT.md` §15. |
 | Identity (provisioning, authorization, `user_id` format, external UUID support) | **PASS** | `tests/integration/test_patient_lifecycle.py`, `tests/integration/test_multi_user_auth.py`; UUID-format compatibility verified directly against `[A-Za-z0-9\-_.]{1,64}` |
 | Credential rotation without memory loss | **PASS** | `tests/integration/test_credential_rotation.py` — old key rejected immediately, new key works, memory/session ownership intact |
 | Patient isolation (cross-patient session/job/audio) | **PASS** | `tests/integration/test_multi_user_auth.py`, `tests/integration/test_e2e_contract_harness.py::test_cross_patient_isolation_across_the_full_chain` |
@@ -50,12 +51,12 @@ No row below is marked PASS without a concrete test, file, or command that demon
 | Real device / physical-device acceptance | Requires actual hardware and the above two components; `STAGING_READINESS.md` lists exactly what VoiceBot-side testing already supports this (cancellation, ownership, retry, expiry, idempotency — all real-HTTP verified). |
 | Native-speaker language quality validation | Requires human native speakers; `LANGUAGE_SUPPORT.md` and `/v1/languages` honestly report `validated: false` for every language rather than pretending otherwise. |
 | Physical alarm interruption / physical network loss / re-pairing | Requires the physical device and Flutter's own audio-arbitration code; VoiceBot exposes the identifiers (`job_id`, `session_id`, `audio_id`) needed to make this possible, documented in `docs/FLUTTER_VOICEBOT_INTEGRATION.md` §9–13. |
-| Production AWS deployment | No AWS deployment has been performed — AWS CLI/credentials are not configured anywhere in this development environment (confirmed: no `aws` binary, no `~/.aws/`, no `AWS_*` env vars, no `boto3`). `docs/AWS_DEPLOYMENT.md` and `deployment/aws/` are the ready-to-run plan and tooling once credentials are available. |
 | Controlled calling / conversational reminder execution | Explicitly gated off pending a real executor — see `INTEGRATION_CONTRACT.md` §9–10 and `docs/VOICEBOT_INTEGRATION_GUIDE.md` §15–16. Building the executor is Backend/Flutter-owned by design. |
 
 ## What "PASS" means here
 
 Every PASS row above is backed by an automated test that runs in this repository's own
-`pytest -q` (625 tests, all passing as of this release) or by a real-provider validation run
-against live Sarvam and Groq credentials. None of it substitutes for the EXTERNAL items
+`pytest -q` (625 tests, all passing as of this release), by a real-provider validation run
+against live Sarvam/Groq/Hugging Face credentials, or by a real HTTP call against the live
+deployment at `https://15-206-144-216.nip.io`. None of it substitutes for the EXTERNAL items
 above — those require infrastructure and people this repository cannot provide.

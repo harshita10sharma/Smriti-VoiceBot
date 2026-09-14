@@ -5,6 +5,11 @@ service. You should be able to build against this document alone, without readin
 VoiceBot's source code. Where a claim needs deeper evidence, it links to the exact
 file/test that proves it.
 
+**Current live deployment:** `https://15-206-144-216.nip.io` (AWS `ap-south-1`,
+`m7i-flex.large`, real HTTPS) — see §20 for the full picture. **Status: VoiceBot service
+is ready for Backend integration. Cross-system integration and physical-device acceptance
+remain pending** — see `docs/RELEASE_ACCEPTANCE.md`.
+
 **Companion documents:**
 - [`docs/BACKEND_VOICEBOT_INTEGRATION.md`](BACKEND_VOICEBOT_INTEGRATION.md) — step-by-step for the Backend developer.
 - [`docs/FLUTTER_VOICEBOT_INTEGRATION.md`](FLUTTER_VOICEBOT_INTEGRATION.md) — step-by-step for the Flutter developer.
@@ -482,10 +487,14 @@ string, never `str(exc)` or a stack trace.
 
 ## 20. Deployment
 
+**Live now**, not a plan: `https://15-206-144-216.nip.io` — AWS `ap-south-1`, EC2
+`m7i-flex.large` (2 vCPU/8 GiB), Docker, Caddy with a real Let's Encrypt certificate,
+30 GB persistent EBS at `/data`. Verified to survive both a container restart and a full
+instance reboot. See `docs/AWS_DEPLOYMENT.md` for the full architecture and
+`deployment/aws/` for the provisioning/deploy tooling.
+
 VoiceBot's `x-api-key`/`SMRITI_API_KEYS`/provider-credential model maps directly onto
-whatever secret store your platform uses (environment variables either way). The current
-deployment target is AWS — see `docs/AWS_DEPLOYMENT.md` for the full plan (EC2 architecture,
-persistent EBS storage for SQLite, the single-instance constraint, security groups). **No
+whatever secret store your platform uses (environment variables either way). **No
 secrets are ever written in this document or any file in this repository.**
 
 ## 21. Integration checklist
@@ -528,7 +537,7 @@ secrets are ever written in this document or any file in this repository.**
 
 | Layer | Who runs it | Where |
 |---|---|---|
-| VoiceBot-only | This repository's CI | `pytest -q` (593 tests as of this release) |
+| VoiceBot-only | This repository's CI | `pytest -q` (625 tests as of this release) |
 | Backend integration | Backend team, against a real VoiceBot instance | Not yet built — see `PROVISIONING_DESIGN.md` |
 | Flutter integration | Flutter team, against the Backend gateway | Not yet built |
 | Joint physical-device | All teams together | External — see `../STAGING_READINESS.md` |

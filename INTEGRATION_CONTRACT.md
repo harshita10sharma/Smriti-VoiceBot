@@ -10,6 +10,14 @@ This supersedes nothing — `HANDOFF.md`, `SECURITY.md` and `LANGUAGE_SUPPORT.md
 detailed references for their topics and are consistent with this document. Use this file as
 the single starting point; follow the cross-references for depth.
 
+**Status legend used throughout this document:**
+- **VERIFIED BY VOICEBOT** — implemented, tested (automated and/or live against
+  `https://15-206-144-216.nip.io`), evidence cited.
+- **INTEGRATION PENDING** — VoiceBot's side is done; a real Backend gateway and/or Flutter
+  client must still be built to exercise it end-to-end.
+- **OPTIONAL / NOT IMPLEMENTED** — explicitly out of scope or gated off pending a real
+  executor (e.g. calling, reminder scheduling) — contract-ready, not built.
+
 ---
 
 ## 0. Ownership map
@@ -463,15 +471,16 @@ See `SECURITY.md`'s "Operational readiness" section for full detail (migrations,
 behavior, health/readiness semantics, credential rotation). Highlights for integration
 planning:
 
-- Dependencies are minimum-pinned (`requirements.txt` uses `>=`), not exact-pinned — a
-  genuinely open gap, not something silently claimed fixed.
+- Dependencies are exact-pinned (`requirements.txt` uses `==`), verified installable in a
+  clean virtual environment.
 - Backup: `python tools/backup_db.py backup` (uses SQLite's online-backup API, safe against
   a live database — never a torn copy). The audio cache directory is a disposable,
   self-expiring cache, not backup-critical.
 - `GET /v1/health` is a liveness check; it returns `ok` regardless of which optional cloud
   providers are configured.
-- This is a **pilot deployment** (Windows host, Tailscale Funnel, one Uvicorn worker, SQLite)
-  — not presented as production-grade availability.
+- This is a **pilot deployment** (AWS EC2, Docker, Caddy HTTPS, one Uvicorn worker, SQLite
+  on a persistent EBS volume — see `docs/AWS_DEPLOYMENT.md`) — not presented as
+  production-grade availability.
 
 ---
 

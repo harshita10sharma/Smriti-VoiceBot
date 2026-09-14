@@ -1,7 +1,42 @@
 # Evaluation
 
 **Date:** 2026-09-05
-**Result of `pytest -q`:** 280 passed
+**Result of `pytest -q`:** 280 passed (historical — see the 2026-09-15 section immediately
+below for the current count and current live-deployment verification)
+
+---
+
+## Current deployment verification — 2026-09-15
+
+Four genuinely different kinds of evidence exist for this project. They are kept
+separate here on purpose — a successful provider request is not a language-quality claim,
+and a passing mocked test is not a live-deployment claim:
+
+1. **Deterministic/mock automated tests** — `pytest -q`: **625 passed, 0 failed**. Every
+   provider call in this suite is mocked; none makes a live network request. This proves
+   the routing/safety/memory/action logic is correct, not that any provider actually works.
+2. **Live provider verification** — real network calls, real credentials, made directly
+   against Groq, Sarvam, and Hugging Face (Indic Parler-TTS model download) from a
+   development/deployment environment with network egress. Confirms each provider
+   integration actually works against the real API, at whatever moment it was run.
+3. **Real deployment verification** — the same real provider calls, but made through the
+   actual deployed HTTPS service at `https://15-206-144-216.nip.io` (AWS `ap-south-1`,
+   `m7i-flex.large`), exercising the full stack: Caddy → Docker → FastAPI → provider,
+   including asynchronous voice jobs, cancellation, protected audio retrieval, memory sync
+   (apply/stale-rejection/conflict-rejection/no-op-replay), patient isolation, and recovery
+   across both a container restart and a full instance reboot. This is the strongest
+   evidence in this repository and is what `docs/RELEASE_ACCEPTANCE.md` cites.
+4. **Native-speaker language quality validation** — **has not been performed for any
+   language.** A successful ASR/LLM/TTS call proves the provider integration works; it says
+   nothing about whether the transcription, response, or pronunciation is actually correct
+   or natural to a native speaker. `config/language_validation.json`'s validated set remains
+   empty, and `/v1/languages` reports `validated: false` for every language. Do not read
+   (2) or (3) above as language-quality evidence — they are not.
+
+Test count history: 280 (2026-09-05, historical) → 625 (current). The increase reflects
+real feature work across multiple sessions (persistent sessions, memory-sync versioning,
+async voice jobs, response-language honesty, deployment hardening), not re-counting the
+same tests — see `CHANGELOG.md` for the dated breakdown.
 
 ---
 

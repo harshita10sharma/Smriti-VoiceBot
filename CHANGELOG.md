@@ -6,6 +6,44 @@ project has not yet cut a numbered release; entries below are grouped
 under the date each change actually landed, not a version number, since
 none has been assigned yet.
 
+## 2026-09-15 — Live AWS deployment, real provider verification, documentation consolidation
+
+- Deployed to AWS for real: EC2 `m7i-flex.large` (`ap-south-1`), persistent 30 GB EBS at
+  `/data`, Docker, Caddy with a real Let's Encrypt certificate. Live at
+  `https://15-206-144-216.nip.io`. Verified to survive both a container restart and a full
+  instance reboot (Docker, Caddy, and the container itself all auto-recover).
+- Real, live provider verification against the deployed service: Groq/Qwen conversation,
+  Sarvam ASR, Sarvam TTS, and Indic Parler-TTS synthesis (asm) all confirmed working with
+  real network calls and real credentials — not mocks.
+- Verified live: authenticated text/voice conversation, deterministic safety refusal,
+  patient isolation (401/403), asynchronous voice jobs with cancellation and audio
+  retrieval, and the full versioned memory-sync contract (apply, stale-revision rejection,
+  same-revision-conflict rejection, idempotent identical-revision replay).
+- Found and fixed, only by actually deploying: a CUDA-linked `torchaudio` build pulled
+  transitively from the wrong package index (failed to import on the CPU-only image);
+  Caddy's documented Fedora/RHEL/CentOS install path has no Amazon Linux 2023 target at
+  all; a bash parser quirk with an apostrophe inside a `${VAR:?message}` expansion; two
+  instances of Git Bash on Windows silently rewriting POSIX-style CLI arguments into
+  Windows paths, corrupting two separate AWS CLI calls.
+- Rotated `SMRITI_API_KEY`, then `GROQ_API_KEY`/`SARVAM_API_KEY`/`HF_TOKEN` (the latter
+  three after a credential accidentally appeared in a development tool transcript),
+  redeployed, and re-verified all four working live with the new values.
+- 625/625 tests passing; `compileall` clean; `tools/validate_config.py` 0 errors;
+  `tools/validate_packs.py` 15/15; all deployment shell scripts `bash -n` clean.
+- Documentation consolidation: audited README.md, INTEGRATION_CONTRACT.md,
+  API_INTEGRATION.md, HANDOFF.md, BACKEND_APP_DEVELOPER_BACKGROUND.md, CODEBASE_STATUS.md,
+  STAGING_READINESS.md, LANGUAGE_SUPPORT.md, EVALUATION.md, and SECURITY.md against the
+  actual current code and live deployment; removed or clearly re-labeled stale claims
+  (an earlier Windows/Tailscale-Funnel pilot deployment presented as current, outdated
+  test counts, "unverified" provider claims now superseded by real live verification, a
+  language-validation claim that overstated what "provider execution succeeded" actually
+  proves). Historical information was preserved and labeled, not deleted.
+- **Remaining work is cross-system, not VoiceBot-owned**: the Backend gateway in
+  `Abhayk777/SMRITI` remains unbuilt (confirmed on a fresh clone — planning documents only,
+  no VoiceBot-calling code), no Flutter repository is accessible, and physical-device
+  acceptance and native-speaker language validation have not been performed. VoiceBot
+  service is ready for Backend integration; cross-system integration is not complete.
+
 ## 2026-09-14 — AWS release pass: response-language honesty, TTS timeout, deployment plan
 
 - Fixed: a deterministic (non-LLM) response with no translated template for

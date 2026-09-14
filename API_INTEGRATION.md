@@ -1,11 +1,9 @@
 # SMRITI VoiceBot API — backend integration guide
 
-> **Historical/local reference.** This document describes the earlier Tailscale
-> Funnel pilot deployment. For the current Azure target, use
-> `docs/AZURE_DEPLOYMENT.md` and `docs/VOICEBOT_INTEGRATION_GUIDE.md` — those
-> are authoritative for base URL, deployment, and integration going forward.
-> The endpoint/request/response content below remains accurate; only the
-> deployment/hosting details are superseded.
+> This is the endpoint-by-endpoint request/response reference, audited against the actual
+> FastAPI schemas in `smriti_voice/api/routes/`. For a narrative walkthrough (architecture,
+> ownership, implementation sequence), start at `docs/VOICEBOT_INTEGRATION_GUIDE.md`
+> instead — the two are complementary, not duplicates.
 
 This document is for the backend/mobile-app developer integrating with the
 deployed SMRITI VoiceBot service. It covers the two endpoints you need: a
@@ -16,15 +14,13 @@ and TTS.
 ## Base URL
 
 ```
-https://<your-tailnet-hostname>.ts.net
+https://15-206-144-216.nip.io
 ```
 
-This deployment runs on a Windows PC and is exposed to the public internet
-via [Tailscale Funnel](https://tailscale.com/kb/1223/funnel), which provides
-the HTTPS certificate and public hostname — there is no separate cloud
-service to name. Ask the operator for the exact hostname currently in use
-(it looks like `desktop-xxxxxxx.tailnetname.ts.net`); it stays stable as
-long as the same device and Tailscale account run the tunnel.
+Current live deployment: AWS EC2 (`ap-south-1`, `m7i-flex.large`), Docker, Caddy
+terminating HTTPS with a real Let's Encrypt certificate. `nip.io` is a free wildcard-DNS
+service that resolves that hostname to the deployment's Elastic IP — see
+`docs/AWS_DEPLOYMENT.md` for the full architecture.
 For local development this is `http://127.0.0.1:8000`.
 
 ## Authentication
@@ -143,7 +139,7 @@ x-api-key: <your VoiceBot API key>
 }
 ```
 
-`status` is one of `queued`, `processing`, `completed`, `failed`. Poll every
+`status` is one of `queued`, `processing`, `completed`, `failed`, `cancelled`. Poll every
 1–2 seconds until it is no longer `queued`/`processing`. On `completed`,
 `audio_id`/`audio_url` are set — fetch them the same way as before. On
 `failed`, `error_code` explains why (e.g. `NO_TTS_PROVIDER_SUPPORTS_LANGUAGE`
@@ -153,6 +149,23 @@ still the correct answer to show — text never depends on TTS succeeding.
 A job belonging to a different `user_id` than the one your key is bound to
 returns `404`, the same as a job id that never existed — job ids cannot be
 used to probe for other users' jobs.
+
+## Cancelling a voice job
+
+```
+POST /v1/voice/jobs/{job_id}/cancel
+x-api-key: <your VoiceBot API key>
+```
+
+```json
+{"job_id": "50f5dc5393764e6b8ade7769e28aca72", "status": "cancelled", "cancelled": true}
+```
+
+Race-safe against the synthesis worker: cancelling a job that has already completed leaves
+the completed result untouched (`cancelled: false` in the response); cancelling a
+queued/processing job stops it and any later poll reports `status: "cancelled"`,
+`error_code: "CANCELLED_BY_CLIENT"`, with no audio ever produced for it. Verified live
+against the deployment above.
 
 ## Endpoint: text turn (no audio in)
 
@@ -171,6 +184,39 @@ Returns the same shape as above minus `transcript`/`audio_*`/`tts_provider`
 (those are voice-turn-only fields). To get audio for a text turn's answer,
 call the voice endpoint, or use `/v1/conversation` for text-only UI and treat
 audio as an separate, optional step your app doesn't need.
+
+## Endpoint: welcome (session-opening greeting)
+
+```
+POST /v1/conversation/welcome
+Content-Type: application/json
+x-api-key: <your VoiceBot API key>
+
+{"user_id": "elder-1", "language": "asm"}
+```
+
+Returns a greeting (`kind: "WELCOME"`) and a fresh `session_id` — use this when the app
+first opens or resumes, before the user has said anything. `session_restored` reports
+whether an existing session was found idle-timeout-eligible and reused.
+
+## Legacy endpoint: `/v1/command`
+
+```
+POST /v1/command
+```
+
+This is the original v4.1 endpoint, kept only for backward compatibility with existing
+callers. It takes `audio_wav`/`language`/`request_id?` and returns the v4.1 response shape
+— it does not have memory sync, voice jobs, or the v5 conversational routing.
+**New integrations should use `/v1/conversation` and `/v1/conversation/voice` above, not
+this endpoint.** It remains API-key-only (no `SMRITI_AUTH_USER_ID` binding) because it does
+not access personal data.
+
+## `GET /v1/tools`
+
+Returns the registered tool schemas (`{"count": N, "advertised_to_model": [...]}`) —
+introspection only, useful for debugging what the model can propose. Not needed for a
+normal Backend integration.
 
 ## Retrieving audio
 
@@ -203,29 +249,62 @@ x-api-key: <your VoiceBot API key>
 
 {
   "user_id": "elder-1",
+  "display_name": "Test Elder",
+  "timezone": "Asia/Kolkata",
+  "language_code": "eng",
+  "active": true,
+  "source_revision": 12,
+  "schema_version": 1,
   "family_members": [
-    {"name": "Bina", "relationship": "daughter", "phone_available": true}
+    {"external_id": "p1", "name": "Bina", "relationship": "daughter",
+     "memory_prompt": "lives in Guwahati", "is_deceased": false, "phone_available": true}
   ],
   "medicines": [
-    {"name": "Metformin", "dose": "500mg", "schedule": "morning, after food"}
+    {"external_id": "m1", "name": "Metformin", "dose": "500mg", "schedule": "morning, after food",
+     "chosen_time_min": 480, "window_start_min": 450, "window_end_min": 510,
+     "days_of_week": "1,2,3,4,5,6,7", "active": true}
   ],
   "daily_routines": [
-    {"time": "08:00", "activity": "breakfast"}
+    {"external_id": "r1", "time": "08:00", "activity": "breakfast"}
   ]
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `user_id` | string | yes | Must be authorized for your key (see Identity binding above), otherwise `403`. |
+| `user_id` | string | yes | Must be authorized for your key (see Identity binding above), otherwise `403`. Accepts your Supabase patient UUID directly. |
+| `display_name` | string | no | Patient's display name. |
+| `timezone` | string | no | IANA timezone (e.g. `"Asia/Kolkata"`) — affects "tonight"/"tomorrow" medicine-time resolution. |
+| `language_code` | string | no | Patient's default language, internal 3-letter code. |
+| `active` | bool | no, default `true` | Set `false` to disable/revoke a patient — no separate admin endpoint. |
+| `source_revision` | int | no | If set, enables staleness/conflict protection (see below). Omit for always-apply. |
+| `schema_version` | int | no | Caregiver-schema version the payload was produced against. |
+| `family_members[].external_id` | string | no | Stable ID from your own database, for correlation across syncs. |
 | `family_members[].name` | string | yes | 1–80 characters. |
 | `family_members[].relationship` | string | yes | 1–40 characters, e.g. `"daughter"`. |
-| `family_members[].phone_available` | bool | no, default `false` | **Never send an actual phone number** — see below. |
+| `family_members[].memory_prompt` | string | no | Free-text context the assistant may reference, e.g. `"lives in Guwahati"`. |
+| `family_members[].is_deceased` | bool | no, default `false` | Passed through as context; never inferred from absence. |
+| `family_members[].phone_available` | bool | no, default `false` | **Never send an actual phone number** — see below. Does not by itself enable calling. |
+| `medicines[].external_id` | string | no | Stable ID for correlation across syncs. |
 | `medicines[].name` | string | yes | 1–80 characters. |
 | `medicines[].dose` | string | no | Free text, e.g. `"500mg"`. |
 | `medicines[].schedule` | string | no | Free text, e.g. `"morning, after food"`. |
+| `medicines[].chosen_time_min` / `window_start_min` / `window_end_min` | int | no | Minutes from midnight, 0–1439. Structured, non-wrapping window (`start <= chosen <= end`) used for deterministic "is it time for X" answers. |
+| `medicines[].days_of_week` | string | no | Comma-separated ISO weekdays, Monday=`1`..Sunday=`7`, e.g. `"1,2,3,4,5,6,7"`. |
+| `medicines[].active` | bool | no, default `true` | |
+| `daily_routines[].external_id` | string | no | Stable ID for correlation across syncs. |
 | `daily_routines[].time` | string | no | 24-hour `HH:MM`, e.g. `"08:00"`. Anything else is rejected with `422`. |
 | `daily_routines[].activity` | string | yes | 1–120 characters. |
+
+### Revision handling (when `source_revision` is set)
+
+- A revision **older** than the currently applied one is rejected (`400`, current revision
+  named in the error).
+- The **same** revision with **different** content is rejected as a conflict (`400`) — use a
+  new, higher revision instead.
+- The **same** revision with **identical** content is a harmless no-op (`status: "no_op"` in
+  the response).
+- All three behaviors verified live against the deployment above.
 
 Any field not listed above — including `phone`, `phone_number`, `mobile`,
 `contact_number`, `telephone`, or any other raw contact value — is **rejected
@@ -253,9 +332,12 @@ anything fails, nothing for that patient changes.
   "user_id": "elder-1",
   "family_members_synced": 1,
   "medicines_synced": 1,
-  "daily_routines_synced": 1
+  "daily_routines_synced": 1,
+  "status": "applied",
+  "source_revision": 12
 }
 ```
+`status` is `"applied"` or `"no_op"` (identical-revision replay).
 
 ## Supported languages
 
@@ -264,15 +346,21 @@ GET /v1/languages          (no auth required)
 GET /v1/languages/{code}
 ```
 
-Returns the full capability matrix (which languages have ASR/TTS/LLM
-support, and whether that support is validated). The four languages with
-**real, validated, end-to-end Indic Parler-TTS voice output** are:
+Returns the full capability matrix. Each language separately reports ASR/LLM/TTS/
+deterministic-fallback **capability** (whether a configured provider can attempt it) and a
+`validated` flag — these are not the same claim. Provider execution (a real API call
+succeeding) is not native-speaker quality validation. **No language currently has
+`validated: true`** — see `LANGUAGE_SUPPORT.md`. `mni` is Meiteilon/Manipuri and is never
+mapped to `mn` (Mongolian).
+
+The four languages with **real Indic Parler-TTS voice output exercised** (model loads,
+synthesis succeeds, audio is real and playable — not yet native-speaker validated) are:
 
 | Code | Language |
 |---|---|
 | `asm` | Assamese |
 | `brx` | Bodo |
-| `mni` | Manipuri |
+| `mni` | Meiteilon/Manipuri |
 | `npi` | Nepali |
 
 Sending an unrecognized language code returns `400 Unknown language: '<code>'`
@@ -307,7 +395,7 @@ with HTTP `400`.
 ## curl example
 
 ```bash
-curl -X POST https://<your-tailnet-hostname>.ts.net/v1/conversation/voice \
+curl -X POST https://15-206-144-216.nip.io/v1/conversation/voice \
   -H "x-api-key: $VOICEBOT_API_KEY" \
   -F "audio_wav=@utterance.wav" \
   -F "user_id=elder-1" \
@@ -315,12 +403,12 @@ curl -X POST https://<your-tailnet-hostname>.ts.net/v1/conversation/voice \
 # -> { "response_text": "...", "job_id": "50f5...", "job_status": "QUEUED", ... }
 
 # Poll until the job is no longer queued/processing:
-curl https://<your-tailnet-hostname>.ts.net/v1/voice/jobs/50f5dc5393764e6b8ade7769e28aca72 \
+curl https://15-206-144-216.nip.io/v1/voice/jobs/50f5dc5393764e6b8ade7769e28aca72 \
   -H "x-api-key: $VOICEBOT_API_KEY"
 # -> { "status": "completed", "audio_id": "122a...", "audio_url": "/v1/audio/122a...", ... }
 
 # Then fetch the audio:
-curl https://<your-tailnet-hostname>.ts.net/v1/audio/<audio_id> \
+curl https://15-206-144-216.nip.io/v1/audio/<audio_id> \
   -H "x-api-key: $VOICEBOT_API_KEY" \
   -o reply.wav
 ```
@@ -331,7 +419,7 @@ curl https://<your-tailnet-hostname>.ts.net/v1/audio/<audio_id> \
 import time
 import requests
 
-BASE_URL = "https://<your-tailnet-hostname>.ts.net"
+BASE_URL = "https://15-206-144-216.nip.io"
 API_KEY = "..."  # from your secret store, never hard-coded
 
 with open("utterance.wav", "rb") as f:
@@ -373,7 +461,7 @@ if audio_bytes:
 ## JavaScript / TypeScript example
 
 ```ts
-const BASE_URL = "https://<your-tailnet-hostname>.ts.net";
+const BASE_URL = "https://15-206-144-216.nip.io";
 const API_KEY = process.env.VOICEBOT_API_KEY!; // never bundle this in client-side JS
 
 async function sendUtterance(wavBlob: Blob, userId: string, language?: string) {

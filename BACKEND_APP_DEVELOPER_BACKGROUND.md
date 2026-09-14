@@ -1,17 +1,16 @@
 # Smriti VoiceBot v5.0.0 — Backend & App Developer Background
 
-> **Historical/local reference.** The deployment facts below (Tailscale Funnel, the specific
-> host) describe an earlier pilot deployment, not the current Azure target. For the
-> authoritative current deployment and integration reference, use
-> `docs/AZURE_DEPLOYMENT.md`, `docs/VOICEBOT_INTEGRATION_GUIDE.md`, and
-> `docs/BACKEND_VOICEBOT_INTEGRATION.md`. The API/contract content below remains a useful
-> deep background reference; only the hosting/network details are superseded.
-
 **Audience:** the backend developer and mobile/app developer integrating with the deployed
 Smriti VoiceBot HTTP API.
-**Status:** this document reflects the **verified, currently live** state of the deployment,
-not a plan or a future design. Every fact below was confirmed against the running production
-service. Where something is optional or not yet enabled, it is explicitly marked as such.
+**Status:** §1 below reflects the **current live AWS deployment**. Sections §2, §11, and §12
+are a **historical snapshot from an earlier Tailscale-Funnel pilot deployment** (a different
+host, a different point in time) — clearly labeled where they appear, kept for their
+still-useful worked examples, not descriptions of the current database or git state. For the
+current git commit and test count, see `CODEBASE_STATUS.md` and `CHANGELOG.md`. The
+API/contract content in the remaining sections (auth, memory sync, voice architecture,
+endpoints, errors) is current and was re-verified against this codebase and the live AWS
+deployment. `docs/VOICEBOT_INTEGRATION_GUIDE.md` and `docs/BACKEND_VOICEBOT_INTEGRATION.md`
+are the master references if this document and those ever disagree.
 
 This supersedes `HANDOFF.md` and `API_INTEGRATION.md` for onboarding purposes; those two files
 remain in the repository as the detailed endpoint reference and are consistent with everything
@@ -23,21 +22,30 @@ stated here.
 
 | Item | Value |
 |---|---|
-| Public URL | `https://desktop-2ijmger.tail27d92f.ts.net` |
-| Host | Windows PC, running the FastAPI service under Uvicorn |
+| Public URL | `https://15-206-144-216.nip.io` |
+| Region / compute | AWS `ap-south-1`, EC2 `m7i-flex.large` (2 vCPU / 8 GiB) |
+| Host | Docker container on the EC2 instance, running the FastAPI service under Uvicorn |
 | Process model | **One** Uvicorn worker (`--workers 1`) — required, see §4 and §21 |
-| Public exposure | [Tailscale Funnel](https://tailscale.com/kb/1223/funnel), forwarding the public hostname to `http://127.0.0.1:8000` on the same machine |
+| Public exposure | Caddy on the instance, real Let's Encrypt HTTPS certificate, forwarding to `127.0.0.1:8000` |
+| Persistence | 30 GB EBS mounted at `/data` (database, audio cache, HF model cache); survives container restart and instance reboot |
 | Live user | `elder-1` (single real elder currently active) |
 | Auth mode | **Single-user** — one `SMRITI_API_KEY` bound to exactly `elder-1` via `SMRITI_AUTH_USER_ID` |
 | elder-2 / elder-3 | **Not active.** No second or third patient identity exists in this deployment's configuration or database. Multi-patient support exists in the code (§5) but is not turned on here. |
 
-## 2. Current Git state
+See `docs/AWS_DEPLOYMENT.md` for the full architecture and `deployment/aws/` for the
+provisioning/deploy tooling.
 
-| Item | Value |
+## 2. Historical: Git state at an earlier Tailscale-pilot snapshot
+
+The table below describes the repository's state at the time of an earlier, now-superseded
+Tailscale-Funnel pilot deployment — not the current commit. See `CODEBASE_STATUS.md` /
+`CHANGELOG.md` for the current state.
+
+| Item | Value (historical) |
 |---|---|
 | `HEAD` | `e6788bc8a3d13f72ddc239ebfd0546c21b446150` |
-| `origin/main` | Equal to `HEAD` (pushed, no divergence) |
-| Working tree | Clean |
+| `origin/main` | Equal to `HEAD` at that time (pushed, no divergence) |
+| Working tree | Clean at that time |
 | Latest commit message | `feat: add caregiver memory synchronization` |
 
 This is the exact commit currently running in production — verified by restarting the live
@@ -48,8 +56,9 @@ the local and public endpoints.
 
 ## 3. What the VoiceBot does (implementation status)
 
-All of the following are implemented and exercised by the test suite (360 tests passing) and,
-where applicable, by real production traffic:
+All of the following are implemented and exercised by the test suite (625 tests passing —
+see `CODEBASE_STATUS.md` for the current dated count) and, where applicable, by real
+production traffic against the current AWS deployment:
 
 - **Multilingual voice assistant** for an elderly user — speech in, speech and text out.
 - **ASR (speech-to-text)** via cloud providers (Sarvam, OpenAI) and a local/offline engine
@@ -145,6 +154,13 @@ to single-user mode) or a **list** of user ids — a backend allow-list letting 
 several named patients, with membership (not equality) checked against the request's
 `user_id`. This is available for a future multi-elder rollout but is **not active** in the
 current deployment, which remains single-user (`elder-1` only).
+
+**Patient UUID → VoiceBot `user_id` mapping.** VoiceBot's `user_id` is a plain string
+(`[A-Za-z0-9\-_.]{1,64}`) — a Supabase patient UUID is accepted **directly**, with no
+translation table on the VoiceBot side. When a real multi-patient Backend gateway exists,
+send the Supabase UUID as `user_id` on every call; no VoiceBot-side identity mapping needs
+to be built. `active`/`chosen_time_min`/etc. schema field names for `POST
+/v1/memory/sync` are documented in §8 below and `API_INTEGRATION.md`.
 
 **API keys must remain server-side.** Never embed a key in a mobile app binary or in
 browser-shipped JavaScript. Your backend holds the key and proxies requests to the VoiceBot.
@@ -272,11 +288,14 @@ of this endpoint, not a defect, and is by design not in scope for `/v1/memory/sy
 
 ---
 
-## 11. Final memory-sync end-to-end test results (production-verified)
+## 11. Historical: memory-sync end-to-end test results from the Tailscale pilot
 
-The following was executed against the **live public deployment**
-(`https://desktop-2ijmger.tail27d92f.ts.net`), using the real `elder-1` identity and the
-real production API key, not a local test client:
+The following was executed against an **earlier, now-superseded live deployment**
+(`https://desktop-2ijmger.tail27d92f.ts.net`, the Tailscale-Funnel pilot host — not the
+current AWS deployment), using the real `elder-1` identity and that deployment's API key,
+not a local test client. Kept as a worked example of the same memory-sync flow, which has
+since been re-verified live against the current AWS deployment — see
+`docs/RELEASE_ACCEPTANCE.md`.
 
 | Check | Result |
 |---|---|
@@ -297,7 +316,10 @@ preservation, were removed after testing. No test data remains in the production
 
 ---
 
-## 12. Production database state
+## 12. Historical: production database state at the Tailscale-pilot snapshot
+
+Describes the database on the earlier Tailscale-pilot host at that time, not the current
+AWS deployment's database.
 
 - `elder-1` exists in the `users` table with **exactly**:
   ```
@@ -472,11 +494,13 @@ Typed VoiceBot errors are returned as `{"error": "<CODE>", "detail": "..."}` wit
 
 ## 21. Production/pilot limitations
 
-- **Windows host.** The service runs as a plain process on a Windows PC, started via a Startup
-  Folder shortcut, not a managed service — the PC must remain powered on for the deployment to
-  be reachable.
-- **Tailscale Funnel** provides the public HTTPS hostname; there is no separate cloud hosting
-  layer. The hostname is stable as long as the same device and Tailscale account run it.
+- **Single EC2 instance.** The service runs in a Docker container on one `m7i-flex.large`
+  instance (AWS `ap-south-1`) with `--restart unless-stopped` and both Docker and Caddy
+  enabled via systemd — verified to survive both a container restart and a full instance
+  reboot. There is no auto-scaling, load balancing, or multi-instance failover; a single
+  instance/AZ outage takes the deployment down until it's manually restored.
+- **Caddy** provides the public HTTPS hostname via a real Let's Encrypt certificate,
+  reverse-proxying to the container's internal port. See `docs/AWS_DEPLOYMENT.md`.
 - **TTS is CPU-intensive** (Indic Parler-TTS) and **fully serialized** through one background
   worker (§4) — by design, not as a temporary constraint. Do not expect parallel TTS
   throughput on this hardware.
@@ -506,7 +530,8 @@ app developer, their code, or any client-side artifact:
 - `SARVAM_API_KEY`
 - `OPENAI_API_KEY`
 - `GROQ_API_KEY`
-- Tailscale account/device credentials
+- AWS credentials for the deployment account
+- The EC2 instance's SSH private key
 - GitHub credentials/tokens for this repository
 - the `.env` file itself
 - the live SQLite database file
@@ -568,14 +593,16 @@ must itself be held server-side only (never in a mobile binary or browser-shippe
 
 ```
 PROJECT:          Smriti VoiceBot v5.0.0
-PUBLIC URL:       https://desktop-2ijmger.tail27d92f.ts.net
+PUBLIC URL:       https://15-206-144-216.nip.io
 LIVE USER:        elder-1
 AUTH MODE:        Single-user
-MEMORY SYNC:      Production verified
-VOICE JOBS:       Production deployed
-SECURITY:         Authentication + authorization verified
-GIT:              e6788bc8a3d13f72ddc239ebfd0546c21b446150
-WORKING TREE:     Clean
-TEST ARTIFACTS:   Cleaned
+MEMORY SYNC:      Verified live (current AWS deployment)
+VOICE JOBS:       Verified live (Sarvam + Indic Parler, cancellation, audio retrieval)
+SECURITY:         Authentication + authorization + patient isolation verified live
+DEPLOYMENT:       AWS ap-south-1, m7i-flex.large, Docker + Caddy, survives reboot
+TESTS:            625 passed — see CODEBASE_STATUS.md / CHANGELOG.md for current commit
+INTEGRATION:      VoiceBot ready for Backend integration. Backend gateway, Flutter
+                   client, and physical-device E2E remain pending — see
+                   docs/RELEASE_ACCEPTANCE.md
 FINAL STATUS:     IMPLEMENTATION + TESTING + DEPLOYMENT COMPLETE
 ```

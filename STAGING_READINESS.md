@@ -69,9 +69,18 @@ it — see the evidence column.
 | Backup | **READY** | See DATABASE above |
 | Rollback | **PARTIAL** | Migrations are forward-only and additive; rolling back application code to an older commit against a newer-schema database is untested and not recommended without restoring a matching backup first |
 
-### Deployment target: AWS
+### Deployment target: AWS — LIVE
 
-**The current deployment target is AWS — see `docs/AWS_DEPLOYMENT.md` for the full,
+**Deployed and verified live at `https://15-206-144-216.nip.io`** (`m7i-flex.large`,
+`ap-south-1`, real Let's Encrypt HTTPS, 30 GB persistent `/data`). Authenticated text/voice,
+real Groq/Sarvam/Indic Parler, memory sync (including stale/conflicting-revision rejection),
+patient isolation, voice-job cancellation, and full recovery across both a container restart
+and a real instance reboot are all verified with live evidence — see
+`docs/AWS_DEPLOYMENT.md` §15. This is a single-instance pilot deployment, not a
+production-scale claim; Backend gateway and Flutter client integration remain external and
+unbuilt (see `docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md`).
+
+**See `docs/AWS_DEPLOYMENT.md` for the full,
 authoritative plan**: recommended architecture (EC2 + EBS), exact compute sizing (with a
 real measured memory requirement for Indic Parler-TTS, which is kept enabled), environment
 variable matrix, security, backup/restore, and `deployment/aws/` for the reproducible

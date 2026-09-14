@@ -262,28 +262,56 @@ unnecessary infrastructure" instruction; note as IaC if the deployment grows), d
 script, smoke-test script, and rollback notes. **None of these have been executed** — they
 are ready to run once AWS credentials are configured in this environment (§15).
 
-## 15. The actual blocker
+## 15. Current live deployment (verified)
 
-The AWS CLI (v1.46.1) is now installed in this development environment. The remaining
-blocker is credentials only:
+This plan has been executed. As of this writing:
 
-```
-$ aws sts get-caller-identity
-Unable to locate credentials. You can configure credentials by running "aws configure".
-```
-No `~/.aws/credentials`, no `~/.aws/config`, no `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/
-`AWS_DEFAULT_REGION` environment variables, and `.env` (read directly, with explicit
-authorization, to check) contains no AWS-related variable at all — only VoiceBot/provider
-secrets (Groq, Sarvam, HF, the VoiceBot API key). **This is the one thing standing between
-this plan and an actual deployment.**
+| Item | Value |
+|---|---|
+| Base URL | `https://15-206-144-216.nip.io` |
+| Instance | `m7i-flex.large` (2 vCPU / 8 GiB), `ap-south-1a` |
+| Instance ID | `i-02191d418176eca9e` |
+| EBS | 30 GB gp3 at `/data`, `DeleteOnTermination: false` |
+| HTTPS | Caddy, real Let's Encrypt certificate, automatic renewal |
+| Domain | `15-206-144-216.nip.io` (free wildcard DNS to the Elastic IP — no domain purchased) |
+| Image | `smriti-voicebot:32dfa49` (git short hash) |
 
-To unblock:
-1. Run `aws configure` with a real IAM user's access key/secret (or provide
-   `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_DEFAULT_REGION` as environment
-   variables) — an IAM user scoped to EC2/EBS/security-group/(optionally)S3 permissions is
-   sufficient; the root account credentials should never be used directly for this.
-2. Re-run `aws sts get-caller-identity` to confirm the identity and account before
-   provisioning anything.
+**Verified live, with real evidence, not merely deployed**: authenticated text conversation,
+welcome, deterministic safety refusal, cross-patient/missing/invalid-auth rejection (403/401),
+memory sync (including stale-revision rejection, conflicting-revision rejection, and
+idempotent no-op replay), real Groq/Qwen calls, real Sarvam ASR/TTS, real Indic Parler-TTS
+synthesis (asm), full async voice-job lifecycle including cancellation, audio retrieval, and
+persistence across both a container restart and a full instance reboot (`/data`, Docker,
+Caddy, and the container itself all survived and auto-recovered).
+
+`m7i-flex.large` was chosen over the originally planned `m6i.large`/`m6i.xlarge` because the
+AWS account rejected `m6i.large` outright as not Free-Tier eligible; `m7i-flex.large` was
+verified (via `DescribeInstanceTypes`, not assumed) to have the same 2 vCPU/8 GiB shape and
+to be Free-Tier eligible on this account. Its CPU is burstable/credit-based rather than
+dedicated -- a real, measured consequence: Indic Parler-TTS generation took 20-27s for short
+utterances (see `SMRITI_TTS_TIMEOUT_S=60` in `env.template`, raised from the 30s default for
+exactly this reason).
+
+### Real defects found only by actually deploying (all fixed, commit `32dfa49`)
+- `torchaudio` resolved to a CUDA-linked build from the default PyPI index (parler_tts/
+  transformers pull it transitively), failing at import on this CPU-only image with
+  `libcudart.so.13: cannot open shared object file`. Fixed by pinning it to the CPU wheel
+  index in the Dockerfile, same version, different source.
+- Caddy's own documented install path (`@caddy/caddy` on Copr) has no Amazon Linux 2023
+  build target at all. Replaced with Caddy's official static-binary install in
+  `first_boot_setup.sh`.
+- An apostrophe inside a `${VAR:?message}` expansion broke bash's parser even nested inside
+  an outer double-quoted string -- reproduced with `bash -n` before fixing.
+- Git Bash / MSYS on Windows silently rewrites any CLI argument that looks like a POSIX path
+  (starting with `/`) into a Windows path, corrupting two separate AWS CLI calls
+  (`ssm get-parameter --name /aws/service/...` and `ec2 attach-volume --device /dev/xvdf`).
+  Fixed with `MSYS2_ARG_CONV_EXCL`, scoped to just those arguments -- a no-op on native
+  Linux/macOS bash.
+
+To reproduce this deployment from a clean AWS account: `deployment/aws/provision.sh` →
+`deployment/aws/first_boot_setup.sh` (on the instance) → build the image (locally if Docker
+is available, or directly on the instance if not, as was necessary here) → `deployment/aws/
+deploy.sh` or the equivalent manual `docker run` → `deployment/aws/smoke_test.sh`.
 
 Once that succeeds, `deployment/aws/provision.sh`, `deployment/aws/first_boot_setup.sh`, and
 `deployment/aws/deploy.sh` (§14) are ready to execute the plan in this document, in that

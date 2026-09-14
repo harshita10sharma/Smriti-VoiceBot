@@ -1,0 +1,52 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Identity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyDiscovery",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeKeyPairs",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeInstances",
+        "ec2:DescribeAddresses",
+        "ec2:DescribeVolumes"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "ap-south-1" }
+      }
+    },
+    {
+      "Sid": "AmiLookup",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:ap-south-1::parameter/aws/service/ami-amazon-linux-latest/*"
+    },
+    {
+      "Sid": "ProvisionCompute",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateKeyPair",
+        "ec2:CreateSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RunInstances",
+        "ec2:CreateTags",
+        "ec2:AllocateAddress",
+        "ec2:AssociateAddress",
+        "ec2:CreateVolume",
+        "ec2:AttachVolume"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:RequestedRegion": "ap-south-1" }
+      }
+    }
+  ]
+}

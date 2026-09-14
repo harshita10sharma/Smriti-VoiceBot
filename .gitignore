@@ -224,6 +224,11 @@ __marimo__/
 !.env.example
 !.env.staging.example
 
+# AWS SSH key material -- deployment/aws/provision.sh writes
+# <KEY_PAIR_NAME>.pem (the private half of the EC2 key pair) into whatever
+# directory it is run from; never let that land in git.
+*.pem
+
 # runtime data
 logs/*.jsonl
 data/voice_dataset/

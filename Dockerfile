@@ -25,8 +25,21 @@ COPY requirements.txt pyproject.toml ./
 # constraint entirely and littering the image with stray files). Quoting
 # fixes the redirection bug; pinning exactly matches this repository's own
 # reproducibility standard for every other dependency.
+# torchaudio is pinned to the CPU wheel index HERE, alongside torch, even
+# though nothing in this Dockerfile imports it directly: transformers/
+# parler_tts pull it in transitively, and if that pull happens from the
+# default PyPI index (not this CPU index) it resolves to a CUDA-linked
+# build that fails at import with "OSError: libcudart.so.13: cannot open
+# shared object file" -- reproduced directly on a real deployed CPU-only
+# instance. Installing the exact same version here first means pip's
+# later transitive resolution for transformers/parler_tts sees it as
+# already satisfied and never touches it. 2.11.0 is the newest version
+# published on the CPU wheel index as of this pin (torchaudio releases lag
+# behind torch's; there is no 2.14.0 build there) and matches what pip
+# resolves transitively for parler_tts==0.2.3 anyway -- this pin only
+# fixes which index it comes from, not the version.
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0" \
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.14.0" "torchaudio==2.11.0" \
     && pip install --no-cache-dir "transformers==4.46.1" "parler_tts==0.2.3"
 
 COPY . .

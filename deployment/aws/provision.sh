@@ -87,7 +87,11 @@ VOLUME_ID=$(aws ec2 create-volume --availability-zone "$AZ" --size "$EBS_VOLUME_
   --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${INSTANCE_NAME}-data}]" \
   --query 'VolumeId' --output text)
 aws ec2 wait volume-available --volume-ids "$VOLUME_ID" --region "$AWS_REGION"
-aws ec2 attach-volume --volume-id "$VOLUME_ID" --instance-id "$INSTANCE_ID" \
+# Same Git Bash / MSYS path-mangling issue as the AMI lookup above ("/dev/xvdf"
+# arrived at the AWS CLI as a rewritten Windows path, e.g.
+# "C:/Program Files/Git/dev/xvdf" -- reproduced directly against a real
+# account). MSYS2_ARG_CONV_EXCL="/dev" is a no-op on native Linux/macOS bash.
+MSYS2_ARG_CONV_EXCL="/dev" aws ec2 attach-volume --volume-id "$VOLUME_ID" --instance-id "$INSTANCE_ID" \
   --device /dev/xvdf --region "$AWS_REGION"
 echo "IMPORTANT: disable delete-on-termination for $VOLUME_ID before going to production --"
 echo "  aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --block-device-mappings \\"

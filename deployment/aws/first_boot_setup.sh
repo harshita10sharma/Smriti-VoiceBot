@@ -14,9 +14,12 @@
 #   ssh -i smriti-voicebot-key.pem ec2-user@<PUBLIC_IP> \
 #     "sudo DOMAIN=your-domain.example bash /tmp/first_boot_setup.sh"
 #
-# DOMAIN must already point (an A record) at the instance's Elastic IP --
-# Caddy's automatic HTTPS (Let's Encrypt) fails otherwise. Run this again
-# with a different DOMAIN if the domain changes; Caddy re-issues safely.
+# DOMAIN must already resolve to the instance's Elastic IP -- Caddy's
+# automatic HTTPS (Let's Encrypt) fails otherwise. If you don't own a domain,
+# a free wildcard DNS service works with no signup or cost: for Elastic IP
+# 15.206.144.216, use 15-206-144-216.nip.io -- it resolves automatically to
+# the IP encoded in the name (see https://nip.io). Run this again with a
+# different DOMAIN if the domain changes; Caddy re-issues safely.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -24,7 +27,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-: "${DOMAIN:?Set DOMAIN=your-domain.example (must already point at this instance's Elastic IP)}"
+: "${DOMAIN:?Set DOMAIN=your-domain.example (must already point at the Elastic IP of this instance)}"
 DATA_DEVICE="${DATA_DEVICE:-/dev/xvdf}"
 
 echo "== Formatting and mounting the /data EBS volume =="
@@ -58,16 +61,63 @@ systemctl enable --now docker
 usermod -aG docker ec2-user || true
 
 echo "== Installing Caddy (HTTPS reverse proxy, automatic Let's Encrypt) =="
-dnf install -y 'dnf-command(copr)'
-dnf copr enable -y @caddy/caddy
-dnf install -y caddy
+# The @caddy/caddy Copr project (Caddy's own documented Fedora/RHEL/CentOS
+# install path) has no Amazon Linux 2023 build target -- confirmed directly
+# against a real instance ("Repository 'amazonlinux-2023-x86_64' does not
+# exist in project '@caddy/caddy'"), not a configuration mistake. Amazon
+# Linux 2023 is not a RHEL/CentOS clone in package terms, so this is a real
+# incompatibility, not something a different dnf invocation fixes. Caddy's
+# own officially documented static-binary method sidesteps distro package
+# repos entirely and is what's actually used here.
+curl -sL 'https://caddyserver.com/api/download?os=linux&arch=amd64' -o /usr/local/bin/caddy
+chmod +x /usr/local/bin/caddy
+
+id caddy >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin caddy
+mkdir -p /etc/caddy /var/lib/caddy /var/log/caddy
+chown -R caddy:caddy /etc/caddy /var/lib/caddy /var/log/caddy
 
 cat > /etc/caddy/Caddyfile <<CADDYFILE
 $DOMAIN {
 	reverse_proxy 127.0.0.1:8000
 }
 CADDYFILE
+chown caddy:caddy /etc/caddy/Caddyfile
 
+# The caddy user has no home directory (--no-create-home, deliberately, to
+# minimise its footprint) -- Caddy's default XDG config/data paths need a
+# writable $HOME otherwise, so these are pointed at /var/lib/caddy instead
+# (already owned by caddy above). Without this, certificate storage/ACME
+# account state fails to save with "permission denied" under /home/caddy,
+# reproduced directly against a real instance.
+cat > /etc/systemd/system/caddy.service <<'UNIT'
+[Unit]
+Description=Caddy
+Documentation=https://caddyserver.com/docs/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+Environment=XDG_DATA_HOME=/var/lib/caddy/.local/share
+Environment=XDG_CONFIG_HOME=/var/lib/caddy/.config
+WorkingDirectory=/var/lib/caddy
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+LimitNPROC=512
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
 systemctl enable --now caddy
 systemctl reload caddy || systemctl restart caddy
 

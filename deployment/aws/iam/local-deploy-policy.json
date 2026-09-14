@@ -16,7 +16,8 @@
         "ec2:DescribeSecurityGroups",
         "ec2:DescribeInstances",
         "ec2:DescribeAddresses",
-        "ec2:DescribeVolumes"
+        "ec2:DescribeVolumes",
+        "ec2:DescribeInstanceTypes"
       ],
       "Resource": "*",
       "Condition": {

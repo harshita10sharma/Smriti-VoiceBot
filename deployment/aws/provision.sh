@@ -54,7 +54,13 @@ else
 fi
 
 echo "== Finding latest Amazon Linux 2023 AMI =="
-AMI_ID=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+# On Git Bash / MSYS (Windows), any argument starting with "/" is silently
+# rewritten as a Windows path before the AWS CLI ever sees it, corrupting
+# this parameter name (observed: it arrived as a single mangled "/C").
+# MSYS2_ARG_CONV_EXCL opts this one argument prefix out of that rewriting;
+# it is unset/ignored on native Linux/macOS bash, so this is a no-op there.
+AMI_ID=$(MSYS2_ARG_CONV_EXCL="/aws/service" aws ssm get-parameter \
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
   --region "$AWS_REGION" --query 'Parameter.Value' --output text)
 
 echo "== Launching EC2 instance: $INSTANCE_NAME ($INSTANCE_TYPE) =="

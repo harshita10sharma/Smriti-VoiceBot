@@ -13,8 +13,8 @@ import sqlite3
 from smriti_voice.database.migrations import MIGRATIONS, SCHEMA_VERSION, migrate
 
 
-def test_schema_version_is_six_after_this_change():
-    assert SCHEMA_VERSION == len(MIGRATIONS) == 6
+def test_schema_version_is_seven_after_this_change():
+    assert SCHEMA_VERSION == len(MIGRATIONS) == 7
 
 
 def test_migrating_a_fresh_database_reaches_current_version():
@@ -105,6 +105,37 @@ def test_upgrading_an_existing_version_4_database_in_place_preserves_data():
 
     count = connection.execute('SELECT COUNT(*) FROM memory_sync_state').fetchone()[0]
     assert count == 0  # new table, empty, not populated for pre-existing data
+
+
+def test_upgrading_an_existing_version_6_database_in_place_preserves_data():
+    """The exact upgrade path a device already running the prior revision
+    (schema version 6, before backend_key_grants existed) goes through."""
+    connection = sqlite3.connect(':memory:')
+    connection.row_factory = sqlite3.Row
+    for index, script in enumerate(MIGRATIONS[:6], start=1):
+        connection.executescript(script)
+        connection.execute(f'PRAGMA user_version = {index}')
+
+    connection.execute(
+        "INSERT INTO users (user_id, display_name) VALUES ('pre-existing-user', 'Someone')")
+    connection.commit()
+
+    version = migrate(connection)
+    assert version == SCHEMA_VERSION
+
+    user = connection.execute(
+        "SELECT * FROM users WHERE user_id = 'pre-existing-user'").fetchone()
+    assert user is not None  # untouched by the new migration
+
+    count = connection.execute('SELECT COUNT(*) FROM backend_key_grants').fetchone()[0]
+    assert count == 0  # new table, empty, not populated for pre-existing data
+
+
+def test_backend_key_grants_table_exists(app):
+    with app.memory.repo.db.connect() as connection:
+        tables = {row['name'] for row in
+                  connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert 'backend_key_grants' in tables
 
 
 def test_external_id_uniqueness_is_enforced_per_user(app):

@@ -59,14 +59,23 @@ def get_limiter(app: Application) -> RateLimiter:
     return _limiter
 
 
-def _parse_api_key_map(raw: str) -> dict[str, str | list[str]]:
-    """Parse ``SMRITI_API_KEYS`` into ``{api_key: user_id}`` or
-    ``{api_key: [user_id, ...]}``.
+def _parse_api_key_map(raw: str) -> dict[str, str | list[str] | dict]:
+    """Parse ``SMRITI_API_KEYS`` into one of three value shapes per key:
 
-    A string value is the original single-patient-per-key mode. A list value
-    is the backend/multi-patient mode: that one key may act as any of the
-    listed (and only the listed) user ids — an explicit allow-list, never
-    "this key plus any user_id the caller sends."
+    - a string: the original single-patient-per-key mode.
+    - a list of strings: a fixed, explicit allow-list -- that one key may
+      act as any of the listed (and only the listed) user ids.
+    - an object ``{"dynamic": true, "user_ids": [...]}`` (``user_ids``
+      optional): a *dynamic* backend key. Its authorized set is the union
+      of ``user_ids`` here (an optional seed list, e.g. known pilot
+      patients) and whatever this exact credential has been durably
+      granted in the database via ``POST /v1/memory/sync`` -- see
+      ``backend_key_grants`` in database/migrations.py and
+      MemoryRepository.grant_backend_key_access. This is what lets a
+      production Backend credential gain a genuinely new patient without
+      an env-var edit and a process restart, while every individual grant
+      remains one explicit, authenticated, auditable (key, user_id) row --
+      never a wildcard evaluated at request time.
 
     Raises ``ValueError`` on anything malformed — callers must treat that as a
     fail-closed 503, never as "fall back to single-key mode", so a typo in
@@ -78,7 +87,8 @@ def _parse_api_key_map(raw: str) -> dict[str, str | list[str]]:
         raise ValueError('SMRITI_API_KEYS is not valid JSON') from exc
     if not isinstance(parsed, dict) or not parsed:
         raise ValueError('SMRITI_API_KEYS must be a non-empty JSON object of '
-                         '{api_key: user_id} or {api_key: [user_id, ...]}')
+                         '{api_key: user_id}, {api_key: [user_id, ...]}, or '
+                         '{api_key: {"dynamic": true, "user_ids": [...]}}')
     for key, value in parsed.items():
         if not isinstance(key, str) or not key.strip():
             raise ValueError('SMRITI_API_KEYS keys must be non-empty strings')
@@ -89,8 +99,20 @@ def _parse_api_key_map(raw: str) -> dict[str, str | list[str]]:
             if not value or not all(isinstance(v, str) and v.strip() for v in value):
                 raise ValueError('SMRITI_API_KEYS list values must be a non-empty list '
                                  'of non-empty user id strings')
+        elif isinstance(value, dict):
+            if value.get('dynamic') is not True:
+                raise ValueError('SMRITI_API_KEYS object values must have "dynamic": true')
+            seed = value.get('user_ids', [])
+            if not isinstance(seed, list) or not all(isinstance(v, str) and v.strip()
+                                                      for v in seed):
+                raise ValueError('SMRITI_API_KEYS "user_ids" must be a list of non-empty '
+                                 'user id strings if present')
+            extra = set(value) - {'dynamic', 'user_ids'}
+            if extra:
+                raise ValueError(f'SMRITI_API_KEYS object values have unknown fields: {extra}')
         else:
-            raise ValueError('SMRITI_API_KEYS values must be a string or a list of strings')
+            raise ValueError('SMRITI_API_KEYS values must be a string, a list of strings, '
+                             'or a {"dynamic": true, ...} object')
     return parsed
 
 
@@ -99,13 +121,17 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
 
     Two mutually exclusive modes, chosen by which variable is set:
 
-    - Multi-user (``SMRITI_API_KEYS``, a JSON object). Each key's value is
-      either a single user id (one key, one patient — a caller can never
-      claim a different ``user_id``) or a list of user ids (one backend key,
-      an explicit allow-list of patients — a caller may act as any id in
-      that list, and only those). Either way, ``authorized_user_ids`` below
-      is what every route must check membership against; it is never "this
-      key plus any user_id the caller sends."
+    - Multi-user (``SMRITI_API_KEYS``, a JSON object). Each key's value is a
+      single user id (one key, one patient — a caller can never claim a
+      different ``user_id``), a list of user ids (one backend key, a fixed,
+      explicit allow-list of patients), or a ``{"dynamic": true, ...}``
+      object (one backend key whose allow-list is the union of an optional
+      seed list and whatever has been durably *granted* to this exact
+      credential — see ``POST /v1/memory/sync`` and
+      MemoryRepository.grant_backend_key_access). In every case,
+      ``authorized_user_ids`` below is what every route must check
+      membership against; it is never "this key plus any user_id the
+      caller sends."
     - Single-user (``SMRITI_API_KEY`` + ``SMRITI_AUTH_USER_ID``): one shared
       key bound to one fixed identity — the original design, unchanged, for a
       deployment that serves exactly one elder.
@@ -125,7 +151,7 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
             raise HTTPException(503, 'API authentication is not configured correctly') from exc
 
         matched_key = None
-        matched_value: str | list[str] | None = None
+        matched_value: str | list[str] | dict | None = None
         for key, value in key_map.items():
             if x_api_key and _constant_time_equals(x_api_key, key):
                 matched_key, matched_value = key, value
@@ -133,22 +159,36 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
         if matched_value is None:
             raise HTTPException(401, 'Invalid API key')
 
-        authorized = frozenset(matched_value) if isinstance(matched_value, list) \
-            else frozenset({matched_value})
+        key_hash = hashlib.sha256(matched_key.encode('utf-8')).hexdigest()
+        if isinstance(matched_value, dict):
+            seed = frozenset(matched_value.get('user_ids', []))
+            granted = app.memory.repo.backend_key_granted_user_ids(key_hash)
+            authorized = seed | granted
+            # A dynamic key that has granted no patient yet (a brand-new
+            # deployment) is not an error: it is authorized for nothing
+            # until its first POST /v1/memory/sync call, exactly like the
+            # existing "auto-provision on first contact" behavior for a
+            # single user_id -- see memory_sync's own docstring.
+            request.state.dynamic_key_hash = key_hash
+        else:
+            authorized = frozenset(matched_value) if isinstance(matched_value, list) \
+                else frozenset({matched_value})
         request.state.authorized_user_ids = authorized
         if len(authorized) == 1:
-            # Single-target key (string form, or a one-element list): fully
-            # backward compatible with authenticated_user_id() and every
-            # route that hasn't been updated to check authorized_user_ids.
+            # Single-target key (string form, or a one-element list/grant
+            # set): fully backward compatible with authenticated_user_id()
+            # and every route that hasn't been updated to check
+            # authorized_user_ids.
             request.state.authenticated_user_id = next(iter(authorized))
             principal = next(iter(authorized))
         else:
-            # A genuinely multi-patient key. Deliberately do NOT set
-            # authenticated_user_id: any route that only knows how to check
-            # a single identity must fail closed (503) rather than guess
-            # which of several authorized patients this request is for.
-            # Rate-limit by the key itself, hashed — never the raw key.
-            principal = 'backend:' + hashlib.sha256(matched_key.encode('utf-8')).hexdigest()[:16]
+            # A genuinely multi-patient key (fixed list or dynamic).
+            # Deliberately do NOT set authenticated_user_id: any route that
+            # only knows how to check a single identity must fail closed
+            # (503) rather than guess which of several authorized patients
+            # this request is for. Rate-limit by the key itself, hashed —
+            # never the raw key.
+            principal = 'backend:' + key_hash[:16]
     else:
         expected = os.getenv(app.config.api_key_env)
         if not expected:
@@ -197,11 +237,27 @@ def authorized_user_ids(request: Request) -> frozenset[str]:
     produces the full allow-list. Routes must check membership (``in``),
     never assume there is exactly one. Fails closed (503) if authentication
     never established any authorization at all — it does not guess.
+
+    A brand-new *dynamic* key that has not granted any patient yet
+    legitimately produces an empty set — that is not a misconfiguration,
+    it is the expected state before its first successful
+    POST /v1/memory/sync (see dynamic_key_hash / memory_sync.py). Only the
+    genuine absence of the attribute (the auth dependency never ran, or ran
+    down a path that never sets it at all) is treated as unconfigured.
     """
     ids = getattr(request.state, 'authorized_user_ids', None)
-    if not ids:
+    if ids is None:
         raise HTTPException(503, 'Authenticated user identity is not configured')
     return ids
+
+
+def dynamic_key_hash(request: Request) -> str | None:
+    """The full SHA-256 hash of the authenticated credential if (and only
+    if) it is a "dynamic" backend key, else ``None``. Used exclusively by
+    ``POST /v1/memory/sync`` to allow provisioning a genuinely new patient
+    for such a key and to record the grant afterward -- every other route
+    still only ever checks membership in ``authorized_user_ids``."""
+    return getattr(request.state, 'dynamic_key_hash', None)
 
 
 def _constant_time_equals(left: str, right: str) -> bool:

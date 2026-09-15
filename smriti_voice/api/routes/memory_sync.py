@@ -30,7 +30,7 @@ from ...memory.models import DailyRoutine, FamilyMember, Medicine
 from ...memory.provenance import provenance_for_write
 from ...memory.repository import CAREGIVER_SYNC_MARKER
 from ...schemas import MemorySyncRequest, MemorySyncResponse
-from ..dependencies import application, authorized_user_ids, require_api_key
+from ..dependencies import application, authorized_user_ids, dynamic_key_hash, require_api_key
 
 log = get_logger('api.memory_sync')
 
@@ -52,6 +52,7 @@ def memory_sync(
     payload: MemorySyncRequest,
     app: Application = Depends(application),
     authorized: frozenset = Depends(authorized_user_ids),
+    dynamic_key: str | None = Depends(dynamic_key_hash),
 ) -> MemorySyncResponse:
     """Full-snapshot, atomic replace of this patient's caregiver-sourced
     family/medicine/routine rows -- per category, an empty array clears
@@ -66,8 +67,16 @@ def memory_sync(
     stale/no-op/conflict detection: an older revision than the one already
     applied, or the same revision with different content, returns 409;
     the same revision with identical content is a harmless 200 no-op; a
-    newer revision applies and is recorded."""
-    if payload.user_id not in authorized:
+    newer revision applies and is recorded.
+
+    A "dynamic" backend key (see SMRITI_API_KEYS / dependencies.py) may call
+    this for a ``user_id`` it has never been granted before -- that is how a
+    production Backend adds a genuinely new patient without an env-var edit
+    and a restart. The grant is recorded (idempotently) only after this call
+    succeeds, so a failed/rejected sync never authorizes a patient it didn't
+    actually provision. Every other credential shape is unchanged: the
+    ``user_id`` must already be in ``authorized`` or this is 403."""
+    if payload.user_id not in authorized and dynamic_key is None:
         raise HTTPException(403, 'user_id is not authorized for this API credential')
     # Deliberately NOT gated by ensure_patient_active: this is the
     # caregiver data-management channel, not a patient-facing
@@ -144,6 +153,13 @@ def memory_sync(
         raise HTTPException(409, f'source_revision {payload.source_revision} was already '
                                  'applied with different content (currently applied revision '
                                  f'{outcome.source_revision}) -- use a new, higher revision')
+
+    if dynamic_key is not None:
+        # Only after a genuinely successful sync -- a rejected/failed call
+        # above never reaches here, so it never authorizes a patient it
+        # didn't actually provision. Idempotent: re-granting an already-
+        # granted (key, user_id) pair is a no-op, never a duplicate.
+        app.memory.repo.grant_backend_key_access(dynamic_key, payload.user_id)
 
     return MemorySyncResponse(
         success=True, user_id=payload.user_id,

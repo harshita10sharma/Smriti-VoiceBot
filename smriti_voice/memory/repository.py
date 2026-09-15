@@ -153,6 +153,29 @@ class MemoryRepository:
                 (user_id, default_display_name or user_id))
 
     # ------------------------------------------------------------------ #
+    # Dynamic backend-key grants (see api/dependencies.py) -- durable,
+    # per-credential patient authorization that lets a "dynamic" backend key
+    # gain a new patient without an env-var edit and a restart. Never a
+    # wildcard: one explicit (key_hash, user_id) row per grant.
+    # ------------------------------------------------------------------ #
+    def grant_backend_key_access(self, key_hash: str, user_id: str) -> None:
+        """Idempotent: granting the same (key, user_id) pair twice is a
+        no-op, never a duplicate row and never an error."""
+        with self.db.connect() as connection:
+            connection.execute(
+                """INSERT INTO backend_key_grants (key_hash, user_id)
+                   VALUES (?, ?)
+                   ON CONFLICT(key_hash, user_id) DO NOTHING""",
+                (key_hash, user_id))
+
+    def backend_key_granted_user_ids(self, key_hash: str) -> frozenset[str]:
+        with self.db.connect() as connection:
+            rows = connection.execute(
+                'SELECT user_id FROM backend_key_grants WHERE key_hash = ?',
+                (key_hash,)).fetchall()
+        return frozenset(row['user_id'] for row in rows)
+
+    # ------------------------------------------------------------------ #
     # Family
     # ------------------------------------------------------------------ #
     def add_family_member(self, member: FamilyMember) -> FamilyMember:

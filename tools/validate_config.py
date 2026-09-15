@@ -149,16 +149,27 @@ def main() -> int:
             check('SMRITI_API_KEYS is valid', False, str(exc))
             key_map = {}
         else:
-            total_identities = sum(1 if isinstance(v, str) else len(v) for v in key_map.values())
+            def _seed_ids(v):
+                if isinstance(v, str):
+                    return [v]
+                if isinstance(v, list):
+                    return v
+                return v.get('user_ids', [])  # dynamic key: optional seed list only --
+                # its DB-granted identities aren't knowable from the env var alone.
+
+            total_identities = sum(len(_seed_ids(v)) for v in key_map.values())
             backend_keys = sum(1 for v in key_map.values() if isinstance(v, list))
+            dynamic_keys = sum(1 for v in key_map.values() if isinstance(v, dict))
             check('SMRITI_API_KEYS is valid', True,
-                  f'{len(key_map)} key(s), {total_identities} authorized identity(ies)'
-                  + (f', {backend_keys} backend/multi-patient key(s)' if backend_keys else '')
+                  f'{len(key_map)} key(s), {total_identities} seed identity(ies)'
+                  + (f', {backend_keys} fixed-list backend key(s)' if backend_keys else '')
+                  + (f', {dynamic_keys} dynamic key(s) (DB-granted identities not counted here)'
+                     if dynamic_keys else '')
                   + ' — multi-user mode')
             all_ids: list[str] = []
             for v in key_map.values():
-                all_ids.extend([v] if isinstance(v, str) else v)
-            check('SMRITI_API_KEYS identities are unique',
+                all_ids.extend(_seed_ids(v))
+            check('SMRITI_API_KEYS seed identities are unique',
                   len(set(all_ids)) == len(all_ids),
                   'the same user id appears under more than one key, which is redundant '
                   'but not unsafe',

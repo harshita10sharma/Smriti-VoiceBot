@@ -318,6 +318,25 @@ MIGRATIONS: list[str] = [
     ALTER TABLE conversations ADD COLUMN pending_json TEXT;
     ALTER TABLE conversations ADD COLUMN last_subject TEXT;
     """,
+    # -- 7 ------------------------------------------------------------------
+    # Durable, per-credential patient grants -- what lets a "dynamic" backend
+    # API key (see SMRITI_API_KEYS / dependencies.py) authorize a genuinely
+    # new patient without an env-var edit and a process restart. Never a
+    # wildcard: each row is one specific (hashed credential, user_id) pair,
+    # created only when that exact credential successfully calls
+    # POST /v1/memory/sync for that exact user_id -- an authenticated,
+    # explicit, auditable act, not a runtime "any patient" check. The key
+    # itself is stored only as its SHA-256 hash (matching the hashing already
+    # used for rate-limit principals in dependencies.py), never in the clear.
+    """
+    CREATE TABLE IF NOT EXISTS backend_key_grants (
+        key_hash TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        granted_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (key_hash, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_backend_key_grants_key ON backend_key_grants(key_hash);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

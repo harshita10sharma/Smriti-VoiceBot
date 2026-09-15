@@ -359,9 +359,15 @@ SUPPORTED** — 7 `NOT_YET_TESTED`, 7 `BENCHMARK_ONLY`, 1 `UNSUPPORTED`.
    target tablet.
 6. Only then append records to `config/language_validation.json`.
 
-## Honest summary
+## Honest summary — HISTORICAL, 2026-09-05 (superseded — see "Current deployment
+verification — 2026-09-15" near the top of this document)
 
-| Subsystem | Verdict |
+This table describes what was true in the isolated, egress-blocked environment this
+particular test session ran in, at that time. It predates all real-provider and
+real-deployment verification performed in later sessions and is kept as a historical
+record of that specific run, not as the document's current conclusion.
+
+| Subsystem | Verdict (2026-09-05) |
 |---|---|
 | Architecture | **PASS** |
 | Safety | **PASS** — deterministic, fails closed, adversarially tested |
@@ -375,6 +381,13 @@ SUPPORTED** — 7 `NOT_YET_TESTED`, 7 `BENCHMARK_ONLY`, 1 `UNSUPPORTED`.
 | Offline | **PARTIAL** — deterministic layer verified; no local model tested |
 | API | **PASS** |
 
-**This system is not complete.** Every cloud provider path and every local model path is
-either mocked or untested. What is proven is the part that matters most for safety: the
-model cannot execute anything, and the refusals hold.
+At the time, every cloud provider path and every local model path was either mocked or
+untested — this was true then and is not a current claim. What was proven at that point
+is the part that matters most for safety: the model cannot execute anything, and the
+refusals hold — that finding has not changed.
+
+**Current status (2026-09-15): Conversation, ASR, LLM, and TTS have all since been
+verified with real provider calls against the live AWS deployment** — see "Current
+deployment verification — 2026-09-15" above and `docs/RELEASE_ACCEPTANCE.md` for the
+evidence. This does not extend to native-speaker language quality validation, which
+remains unperformed for every language regardless of provider verification status.

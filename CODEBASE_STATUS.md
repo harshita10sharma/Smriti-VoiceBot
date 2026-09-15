@@ -90,12 +90,17 @@ Two real bugs were found by this verification and fixed:
 
 Screening runs **before** the model. A refusal never reaches a provider.
 
-### Conversation — **WORKING** (never run against a real model)
+### Conversation — **WORKING** (as of 2026-09-05, only ever run against `MockLLMProvider`;
+**superseded** — real Groq/Qwen conversation has since been exercised repeatedly against
+the live AWS deployment, see "Current status — 2026-09-15" above)
 
 `conversation/manager.py` routes every turn through: injection screen → safety screen →
 pending confirmation → v4.1 command router → LLM with tools → deterministic fallback.
-Session state, bounded history, language following and confirmation are all covered by tests.
-The LLM branch has only ever run against `MockLLMProvider`.
+Session state, bounded history, language following and confirmation are all covered by
+this repository's own deterministic test suite, which still mocks the LLM branch by
+design (see `TESTING.md`) — that automated-test scope is unchanged. What *has* changed
+since 2026-09-05 is real-provider/real-deployment verification, which is separate from
+the automated suite and is current as of 2026-09-15.
 
 ### Personal memory — **WORKING**
 

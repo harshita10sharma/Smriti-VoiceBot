@@ -16,10 +16,22 @@ automated test coverage in `tests/integration/test_dynamic_backend_key_provision
    hand-maintained list of patients. Adding a patient to this list still requires an
    env-var edit and a restart — this mode is unchanged and remains appropriate for a small,
    infrequently-changing pilot roster.
-3. **Dynamic (production)**: `"the-key": {"dynamic": true}` (optionally with a seed
-   `"user_ids": [...]`) — one key whose authorized patient set is the union of that seed
-   list and whatever has been durably *granted* to this exact credential in the database.
-   **This is the mode that removes the manual-env-var bottleneck.**
+3. **Dynamic (production)**: `"the-key": {"dynamic": true, "id": "backend-primary",
+   "user_ids": [...]}` (`id` and `user_ids` both optional) — one key whose authorized
+   patient set is the union of the seed `user_ids` list and whatever has been durably
+   *granted* in the database. **This is the mode that removes the manual-env-var
+   bottleneck.**
+
+   **Set `id`.** It is a stable, operator-chosen label for "this Backend credential,"
+   kept separate from the credential's own secret value. Grants are looked up by `id`
+   when present. Without one, grants fall back to being scoped to a hash of the secret
+   itself — which means **rotating that secret later orphans every dynamically-granted
+   patient** (each would need one repeat `POST /v1/memory/sync` to re-authorize under the
+   new secret). This was discovered the hard way: an earlier rotation of the live
+   deployment's key, done before `id` existed, orphaned two test patients, requiring
+   exactly that manual re-sync. Setting `id` once removes this friction permanently — the
+   secret can be rotated as often as needed and every existing grant keeps working with
+   zero manual steps, because the `id` never changes.
 
 ## How a dynamic key gains a new patient, with no env-var edit and no restart
 
@@ -29,14 +41,15 @@ automated test coverage in `tests/integration/test_dynamic_backend_key_provision
    name a brand-new `user_id` here — this is the one and only place a dynamic key can
    introduce a patient it wasn't already authorized for.
 3. Only if that sync call **succeeds** (not on a rejected/stale/conflicting one), VoiceBot
-   records one row in `backend_key_grants`: `(SHA-256 hash of the key, user_id)`. This is
+   records one row in `backend_key_grants`: `(scope, user_id)`, where `scope` is
+   `id:<the configured id>` if one is set, else `hash:<SHA-256 of the secret>`. This is
    an explicit, auditable grant — never a wildcard evaluated at request time. A dynamic
    key with zero grants and no seed list is authorized for nothing until its first
    successful sync, exactly like the original single-`user_id` auto-provisioning behavior.
 4. Every subsequent request — `/v1/conversation`, `/v1/conversation/voice`, job polling,
    cancellation, audio retrieval — checks membership in the union of the seed list and the
-   database grants for that credential. No route ever trusts a client-supplied `user_id`
-   without this check.
+   database grants for that credential's scope. No route ever trusts a client-supplied
+   `user_id` without this check.
 5. `POST /v1/memory/sync` with `"active": false` disables the patient across every
    conversational/voice endpoint, independent of the grant — unchanged from before, and
    this is also today's revoke mechanism (see "What is still not built" below).

@@ -65,17 +65,29 @@ def _parse_api_key_map(raw: str) -> dict[str, str | list[str] | dict]:
     - a string: the original single-patient-per-key mode.
     - a list of strings: a fixed, explicit allow-list -- that one key may
       act as any of the listed (and only the listed) user ids.
-    - an object ``{"dynamic": true, "user_ids": [...]}`` (``user_ids``
-      optional): a *dynamic* backend key. Its authorized set is the union
-      of ``user_ids`` here (an optional seed list, e.g. known pilot
-      patients) and whatever this exact credential has been durably
+    - an object ``{"dynamic": true, "id": "...", "user_ids": [...]}``
+      (``id`` and ``user_ids`` both optional): a *dynamic* backend key. Its
+      authorized set is the union of ``user_ids`` here (an optional seed
+      list, e.g. known pilot patients) and whatever has been durably
       granted in the database via ``POST /v1/memory/sync`` -- see
       ``backend_key_grants`` in database/migrations.py and
       MemoryRepository.grant_backend_key_access. This is what lets a
       production Backend credential gain a genuinely new patient without
       an env-var edit and a process restart, while every individual grant
-      remains one explicit, authenticated, auditable (key, user_id) row --
-      never a wildcard evaluated at request time.
+      remains one explicit, authenticated, auditable row -- never a
+      wildcard evaluated at request time.
+
+      **Set a stable "id"** (any operator-chosen string, e.g.
+      ``"backend-primary"``) for a production dynamic key. Grants are
+      looked up by this id when present, so rotating the secret *value*
+      later (a new random string as the JSON key) never orphans patients
+      already granted -- keep the same ``id``, the same grants apply
+      immediately, with no re-sync needed. Without an ``id``, grants fall
+      back to being scoped to a hash of the secret itself, which means a
+      future rotation of that secret DOES orphan them (each grant would
+      need one repeat ``POST /v1/memory/sync`` call under the new secret)
+      -- acceptable for a pilot with few patients, not recommended once a
+      Backend is provisioning patients on an ongoing basis.
 
     Raises ``ValueError`` on anything malformed — callers must treat that as a
     fail-closed 503, never as "fall back to single-key mode", so a typo in
@@ -88,7 +100,8 @@ def _parse_api_key_map(raw: str) -> dict[str, str | list[str] | dict]:
     if not isinstance(parsed, dict) or not parsed:
         raise ValueError('SMRITI_API_KEYS must be a non-empty JSON object of '
                          '{api_key: user_id}, {api_key: [user_id, ...]}, or '
-                         '{api_key: {"dynamic": true, "user_ids": [...]}}')
+                         '{api_key: {"dynamic": true, "id": "...", "user_ids": [...]}}')
+    seen_ids: dict[str, str] = {}
     for key, value in parsed.items():
         if not isinstance(key, str) or not key.strip():
             raise ValueError('SMRITI_API_KEYS keys must be non-empty strings')
@@ -107,7 +120,17 @@ def _parse_api_key_map(raw: str) -> dict[str, str | list[str] | dict]:
                                                       for v in seed):
                 raise ValueError('SMRITI_API_KEYS "user_ids" must be a list of non-empty '
                                  'user id strings if present')
-            extra = set(value) - {'dynamic', 'user_ids'}
+            key_id = value.get('id')
+            if key_id is not None and (not isinstance(key_id, str) or not key_id.strip()):
+                raise ValueError('SMRITI_API_KEYS "id" must be a non-empty string if present')
+            if key_id is not None:
+                if key_id in seen_ids:
+                    raise ValueError(
+                        f'SMRITI_API_KEYS "id" {key_id!r} is used by more than one key -- '
+                        'each dynamic key needs its own unique id, since grants are shared '
+                        'by every credential using the same one')
+                seen_ids[key_id] = key
+            extra = set(value) - {'dynamic', 'user_ids', 'id'}
             if extra:
                 raise ValueError(f'SMRITI_API_KEYS object values have unknown fields: {extra}')
         else:
@@ -159,17 +182,24 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
         if matched_value is None:
             raise HTTPException(401, 'Invalid API key')
 
-        key_hash = hashlib.sha256(matched_key.encode('utf-8')).hexdigest()
         if isinstance(matched_value, dict):
+            key_id = matched_value.get('id')
+            # A stable "id" survives credential rotation (a new secret,
+            # same id, keeps every existing grant); falling back to a hash
+            # of the secret itself is what would otherwise orphan grants
+            # the moment the secret changes -- see _parse_api_key_map's
+            # docstring for the operational tradeoff.
+            grant_scope = f'id:{key_id}' if key_id else \
+                'hash:' + hashlib.sha256(matched_key.encode('utf-8')).hexdigest()
             seed = frozenset(matched_value.get('user_ids', []))
-            granted = app.memory.repo.backend_key_granted_user_ids(key_hash)
+            granted = app.memory.repo.backend_key_granted_user_ids(grant_scope)
             authorized = seed | granted
             # A dynamic key that has granted no patient yet (a brand-new
             # deployment) is not an error: it is authorized for nothing
             # until its first POST /v1/memory/sync call, exactly like the
             # existing "auto-provision on first contact" behavior for a
             # single user_id -- see memory_sync's own docstring.
-            request.state.dynamic_key_hash = key_hash
+            request.state.dynamic_key_hash = grant_scope
         else:
             authorized = frozenset(matched_value) if isinstance(matched_value, list) \
                 else frozenset({matched_value})
@@ -187,8 +217,10 @@ def require_api_key(request: Request, x_api_key: str | None = Header(default=Non
             # only knows how to check a single identity must fail closed
             # (503) rather than guess which of several authorized patients
             # this request is for. Rate-limit by the key itself, hashed —
-            # never the raw key.
-            principal = 'backend:' + key_hash[:16]
+            # never the raw key. (Independent of grant_scope above, which
+            # only applies to a dynamic key's grant lookup.)
+            principal = 'backend:' + hashlib.sha256(
+                matched_key.encode('utf-8')).hexdigest()[:16]
     else:
         expected = os.getenv(app.config.api_key_env)
         if not expected:

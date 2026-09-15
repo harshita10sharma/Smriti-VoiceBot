@@ -30,11 +30,11 @@ def dynamic_client(app, monkeypatch):
     return TestClient(create_app(app))
 
 
-def _sync(client, user_id, *, display_name=None):
+def _sync(client, user_id, *, display_name=None, key=DYNAMIC_KEY):
     body = {'user_id': user_id, 'family_members': [], 'medicines': [], 'daily_routines': []}
     if display_name:
         body['display_name'] = display_name
-    return client.post('/v1/memory/sync', headers={'x-api-key': DYNAMIC_KEY}, json=body)
+    return client.post('/v1/memory/sync', headers={'x-api-key': key}, json=body)
 
 
 # --------------------------------------------------------------------------- #
@@ -72,11 +72,11 @@ def test_repeated_provisioning_does_not_duplicate_grant_rows(dynamic_client, app
     _sync(dynamic_client, 'no-dup-patient')
     _sync(dynamic_client, 'no-dup-patient')
     import hashlib
-    key_hash = hashlib.sha256(DYNAMIC_KEY.encode('utf-8')).hexdigest()
+    scope = 'hash:' + hashlib.sha256(DYNAMIC_KEY.encode('utf-8')).hexdigest()
     with app.memory.repo.db.connect() as connection:
         count = connection.execute(
             'SELECT COUNT(*) FROM backend_key_grants WHERE key_hash = ? AND user_id = ?',
-            (key_hash, 'no-dup-patient')).fetchone()[0]
+            (scope, 'no-dup-patient')).fetchone()[0]
     assert count == 1
 
 
@@ -301,6 +301,81 @@ def test_a_cannot_retrieve_b_audio(two_dynamic_patients):
     # test_multi_user_auth.py/test_voice_jobs.py suites, which this file
     # deliberately does not duplicate wholesale.
     assert resp.status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# Stable "id" -- grants survive the credential's own secret value rotating
+# --------------------------------------------------------------------------- #
+def test_grants_are_orphaned_on_rotation_without_a_stable_id(app, monkeypatch):
+    """Documents the real, expected tradeoff of NOT setting an id: this is
+    not a bug, but it's exactly the friction a stable id exists to avoid,
+    so it's worth a test that fails loudly if the fallback silently
+    stopped orphaning (which would mean grants are no longer scoped to the
+    credential at all -- a security regression, not an improvement)."""
+    from fastapi.testclient import TestClient
+    from smriti_voice.api.app import create_app
+
+    monkeypatch.delenv('SMRITI_API_KEY', raising=False)
+    monkeypatch.delenv('SMRITI_AUTH_USER_ID', raising=False)
+    monkeypatch.setenv('SMRITI_API_KEYS', json.dumps({'old-secret-value': {'dynamic': True}}))
+    old_client = TestClient(create_app(app))
+    sync_resp = _sync(old_client, 'rotation-test-patient', key='old-secret-value')
+    assert sync_resp.status_code == 200
+    assert old_client.post('/v1/conversation', headers={'x-api-key': 'old-secret-value'},
+                           json={'user_id': 'rotation-test-patient', 'message': 'hi'}
+                           ).status_code == 200
+
+    monkeypatch.setenv('SMRITI_API_KEYS', json.dumps({'new-secret-value': {'dynamic': True}}))
+    new_client = TestClient(create_app(app))
+    resp = new_client.post('/v1/conversation', headers={'x-api-key': 'new-secret-value'},
+                           json={'user_id': 'rotation-test-patient', 'message': 'hi'})
+    assert resp.status_code == 403  # orphaned -- exactly the friction "id" fixes
+
+
+def test_grants_survive_rotation_with_a_stable_id(app, monkeypatch):
+    """The actual fix: same id, new secret value, patient stays authorized
+    with no re-sync needed."""
+    from fastapi.testclient import TestClient
+    from smriti_voice.api.app import create_app
+
+    monkeypatch.delenv('SMRITI_API_KEY', raising=False)
+    monkeypatch.delenv('SMRITI_AUTH_USER_ID', raising=False)
+    monkeypatch.setenv('SMRITI_API_KEYS', json.dumps(
+        {'old-secret-value': {'dynamic': True, 'id': 'backend-primary'}}))
+    old_client = TestClient(create_app(app))
+    sync_resp = _sync(old_client, 'stable-id-patient', key='old-secret-value')
+    assert sync_resp.status_code == 200
+    assert old_client.post('/v1/conversation', headers={'x-api-key': 'old-secret-value'},
+                           json={'user_id': 'stable-id-patient', 'message': 'hi'}
+                           ).status_code == 200
+
+    # Rotate the secret -- same id, no re-sync.
+    monkeypatch.setenv('SMRITI_API_KEYS', json.dumps(
+        {'new-secret-value': {'dynamic': True, 'id': 'backend-primary'}}))
+    new_client = TestClient(create_app(app))
+    assert old_client.post('/v1/conversation', headers={'x-api-key': 'old-secret-value'},
+                           json={'user_id': 'stable-id-patient', 'message': 'hi'}
+                           ).status_code == 401  # old secret itself no longer matches any key
+    resp = new_client.post('/v1/conversation', headers={'x-api-key': 'new-secret-value'},
+                           json={'user_id': 'stable-id-patient', 'message': 'hi'})
+    assert resp.status_code == 200  # new secret, same id -- grant carried over automatically
+
+
+def test_two_keys_cannot_share_the_same_id(app, monkeypatch):
+    monkeypatch.delenv('SMRITI_API_KEY', raising=False)
+    monkeypatch.delenv('SMRITI_AUTH_USER_ID', raising=False)
+    monkeypatch.setenv('SMRITI_API_KEYS', json.dumps({
+        'key-one': {'dynamic': True, 'id': 'dup-id'},
+        'key-two': {'dynamic': True, 'id': 'dup-id'},
+    }))
+    from fastapi.testclient import TestClient
+    from smriti_voice.api.app import create_app
+    resp = TestClient(create_app(app)).get('/v1/health')
+    assert resp.status_code == 200  # health itself never fails closed on this
+    conv = TestClient(create_app(app)).post(
+        '/v1/conversation', headers={'x-api-key': 'key-one'},
+        json={'user_id': 'anyone', 'message': 'hi'})
+    assert conv.status_code == 503  # misconfigured SMRITI_API_KEYS -- fails closed
 
 
 def test_existing_single_patient_tests_are_unaffected(client, auth_headers):

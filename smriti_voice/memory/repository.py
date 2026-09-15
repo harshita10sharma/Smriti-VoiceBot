@@ -153,13 +153,20 @@ class MemoryRepository:
                 (user_id, default_display_name or user_id))
 
     # ------------------------------------------------------------------ #
-    # Dynamic backend-key grants (see api/dependencies.py) -- durable,
-    # per-credential patient authorization that lets a "dynamic" backend key
-    # gain a new patient without an env-var edit and a restart. Never a
-    # wildcard: one explicit (key_hash, user_id) row per grant.
+    # Dynamic backend-key grants (see api/dependencies.py) -- durable
+    # patient authorization that lets a "dynamic" backend key gain a new
+    # patient without an env-var edit and a restart. Never a wildcard: one
+    # explicit (scope, user_id) row per grant. `scope` is either
+    # "id:<operator-chosen stable id>" (survives the credential's own
+    # secret value rotating -- the recommended production shape) or
+    # "hash:<sha256 of the secret>" (the fallback when no stable id is
+    # configured -- rotating the secret then orphans existing grants,
+    # since a new secret hashes to a different scope). Either way it is an
+    # opaque string to this layer; api/dependencies.py decides which shape
+    # applies.
     # ------------------------------------------------------------------ #
     def grant_backend_key_access(self, key_hash: str, user_id: str) -> None:
-        """Idempotent: granting the same (key, user_id) pair twice is a
+        """Idempotent: granting the same (scope, user_id) pair twice is a
         no-op, never a duplicate row and never an error."""
         with self.db.connect() as connection:
             connection.execute(

@@ -50,12 +50,16 @@ layer and must not be asked to enforce it). Separately, VoiceBot enforces that y
 server-side `x-api-key` is itself authorized for this `user_id` (via `SMRITI_API_KEYS`) —
 two independent checks, both must pass.
 
-**For production, use a "dynamic" `SMRITI_API_KEYS` credential** —
-`{"your-key": {"dynamic": true}}` — instead of a fixed list you'd otherwise have to edit
-by hand for every new patient. A dynamic key's authorized set grows automatically the
-first time it successfully syncs a given `user_id` (step 4), with no VoiceBot-side
-config change or restart. It never becomes a wildcard: a `user_id` it has never synced is
-still `403`, exactly like a fixed-list key — see `PROVISIONING_DESIGN.md`.
+**For production, use a "dynamic" `SMRITI_API_KEYS` credential with a stable `id`** —
+`{"your-key": {"dynamic": true, "id": "backend-primary"}}` — instead of a fixed list
+you'd otherwise have to edit by hand for every new patient. A dynamic key's authorized set
+grows automatically the first time it successfully syncs a given `user_id` (step 4), with
+no VoiceBot-side config change or restart. It never becomes a wildcard: a `user_id` it has
+never synced is still `403`, exactly like a fixed-list key — see `PROVISIONING_DESIGN.md`.
+**Always set `id`**: it is what lets you rotate `your-key`'s own secret value later
+without losing every patient already granted — keep the same `id`, every grant carries
+over with zero manual steps. Omitting `id` works too, but a future rotation then orphans
+every dynamically-granted patient (each needs one repeat sync to re-authorize).
 
 ## 4. Provision / re-enable VoiceBot identity when needed
 

@@ -63,8 +63,14 @@ def build_health(*, config: AppConfig, languages: LanguageService, llm: LLMRoute
         'tools': {'registered': tool_count},
         'configuration': {
             'offline_forced': config.offline_forced,
-            'authentication_configured': bool(os.getenv(config.api_key_env)) and
-            bool(os.getenv('SMRITI_AUTH_USER_ID')),
+            # SMRITI_API_KEYS (fixed-list or dynamic multi-user mode) is a
+            # complete, independent authentication configuration -- this
+            # previously only recognised the single-user
+            # SMRITI_API_KEY+SMRITI_AUTH_USER_ID pair, so a properly secured
+            # multi-user deployment falsely reported authentication as not
+            # configured at all.
+            'authentication_configured': bool(os.getenv('SMRITI_API_KEYS'))
+            or (bool(os.getenv(config.api_key_env)) and bool(os.getenv('SMRITI_AUTH_USER_ID'))),
             'unauthenticated_access_allowed': config.allow_unauthenticated,
             'max_upload_bytes': config.max_upload_bytes,
             'max_history_turns': config.max_history_turns,

@@ -30,6 +30,26 @@ def test_health_requires_no_authentication(client):
     assert resp.status_code == 200  # no x-api-key sent
 
 
+def test_authentication_configured_is_true_for_single_user_mode(client):
+    body = client.get('/v1/health').json()
+    assert body['configuration']['authentication_configured'] is True
+
+
+def test_authentication_configured_is_true_for_multi_user_mode(app, monkeypatch):
+    """Real, previously-reproduced defect: a properly secured multi-user
+    (SMRITI_API_KEYS) deployment falsely reported authentication as NOT
+    configured at all, because this field only ever recognised the
+    single-user SMRITI_API_KEY+SMRITI_AUTH_USER_ID pair."""
+    import json
+    from fastapi.testclient import TestClient
+    from smriti_voice.api.app import create_app
+    monkeypatch.delenv('SMRITI_API_KEY', raising=False)
+    monkeypatch.delenv('SMRITI_AUTH_USER_ID', raising=False)
+    monkeypatch.setenv('SMRITI_API_KEYS', json.dumps({'some-key': {'dynamic': True}}))
+    body = TestClient(create_app(app)).get('/v1/health').json()
+    assert body['configuration']['authentication_configured'] is True
+
+
 def test_general_conversation_capability_is_not_missed_for_any_real_provider(app):
     """Real, previously-reproduced defect: capabilities.general_conversation
     checked a hand-maintained list of provider names that omitted 'groq'

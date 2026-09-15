@@ -84,11 +84,14 @@ x-api-key: <credential>
 - Provider credentials (`GROQ_API_KEY`, `SARVAM_API_KEY`, `HF_TOKEN`, etc.) never leave
   VoiceBot at all — not to the Backend, not to Flutter.
 - Missing/invalid key → `401`. Unauthorized `user_id` for a valid key → `403`.
-- Two configuration modes exist server-side (`SMRITI_API_KEY`+`SMRITI_AUTH_USER_ID` for a
-  single fixed patient, or `SMRITI_API_KEYS` — a JSON map — for one key per patient or one
-  backend key authorized for many patients). Which mode is active is a VoiceBot deployment
-  decision; either way, the Backend only ever sends `x-api-key` and a `user_id` it is
-  authorized for.
+- Three configuration modes exist server-side, chosen via `SMRITI_API_KEYS`:
+  `SMRITI_API_KEY`+`SMRITI_AUTH_USER_ID` for a single fixed patient (pilot/dev only — see
+  §20); a fixed explicit list of patients per key (small, hand-maintained rosters); or a
+  **dynamic** key (`{"dynamic": true}`) whose authorized patients grow automatically via
+  its own successful `POST /v1/memory/sync` calls, with no env-var edit or restart — the
+  production mode. Which mode is active is a VoiceBot deployment decision; either way, the
+  Backend only ever sends `x-api-key` and a `user_id` it is authorized for. Full detail:
+  `PROVISIONING_DESIGN.md`.
 
 ## 3. Patient identity
 

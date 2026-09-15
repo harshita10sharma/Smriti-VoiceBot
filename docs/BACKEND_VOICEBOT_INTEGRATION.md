@@ -50,12 +50,23 @@ layer and must not be asked to enforce it). Separately, VoiceBot enforces that y
 server-side `x-api-key` is itself authorized for this `user_id` (via `SMRITI_API_KEYS`) —
 two independent checks, both must pass.
 
+**For production, use a "dynamic" `SMRITI_API_KEYS` credential** —
+`{"your-key": {"dynamic": true}}` — instead of a fixed list you'd otherwise have to edit
+by hand for every new patient. A dynamic key's authorized set grows automatically the
+first time it successfully syncs a given `user_id` (step 4), with no VoiceBot-side
+config change or restart. It never becomes a wildcard: a `user_id` it has never synced is
+still `403`, exactly like a fixed-list key — see `PROVISIONING_DESIGN.md`.
+
 ## 4. Provision / re-enable VoiceBot identity when needed
 
 No separate provisioning call exists or is needed. The first `POST /v1/memory/sync` or
-first conversational turn for a new `user_id` auto-provisions it. To re-enable a
-previously disabled patient, send `POST /v1/memory/sync` with `"active": true` — this
-route stays reachable even while disabled, specifically for this purpose.
+first conversational turn for a new `user_id` auto-provisions its data row. **For a
+dynamic key specifically, that same first successful sync is also what authorizes the
+credential for that patient** — until then, every other endpoint returns `403` for it,
+even from the right credential, because provisioning the row and being authorized to use
+it remain two separate checks (see step 3). To re-enable a previously disabled patient,
+send `POST /v1/memory/sync` with `"active": true` — this route stays reachable even while
+disabled, specifically for this purpose, and does not require re-granting.
 
 ```jsonc
 POST /v1/memory/sync

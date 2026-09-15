@@ -1,76 +1,75 @@
-# Patient provisioning: current pilot vs. future scalable design
+# Patient provisioning: pilot fixed-list mode vs. dynamic production mode
 
-**Status of this document: the "Future scalable design" section below is
-FUTURE DESIGN. NOT IMPLEMENTED.** Nothing in that section exists in this
-repository's code. This document exists so the shape of a later,
-larger-scale mechanism is written down and can be reviewed jointly with
-the Backend team before anyone builds it — it is a proposal to discuss,
-not a spec already being executed against.
+**Status: the dynamic mechanism described below is IMPLEMENTED**, not merely designed. It
+was previously a future-design proposal in this document; it now exists in
+`smriti_voice/api/dependencies.py`, `smriti_voice/api/routes/memory_sync.py`,
+`smriti_voice/memory/repository.py`, and `database/migrations.py` (migration 7), with
+automated test coverage in `tests/integration/test_dynamic_backend_key_provisioning.py`.
 
-## Current pilot (implemented, in this repository today)
+## Two modes, both real, chosen per API key
 
-- **Server-side credential allow-list.** `SMRITI_API_KEYS`, a JSON object
-  mapping each API key to one `user_id` or an explicit list of `user_id`s,
-  set as a process environment variable. Adding, removing, or repointing a
-  patient means editing this variable and restarting the process — there
-  is no live admin API for it.
-- **Stable patient identity.** `user_id` is VoiceBot's own primary key for
-  a patient; any string matching `[A-Za-z0-9\-_.]{1,64}` is accepted,
-  including a Supabase UUID sent as-is. Patient memory, sessions, jobs,
-  and audio are all scoped to this identity, never to the credential used
-  to reach it (see `test_credential_rotation.py` for the verified proof
-  that rotating a key never loses a patient's memory).
-- **Authorization separate from provisioning.** A `user_id` a key
-  authorizes but that has never been synced or talked to yet is served
-  normally; VoiceBot auto-provisions a bare row on first contact.
-  Authorization is checked from the key config alone, never from whether
-  that row exists.
-- **Disable/revoke.** `POST /v1/memory/sync`'s `active` field disables (or
-  re-enables) a patient across every conversational/voice endpoint,
-  independent of the key allow-list.
-- **This is genuinely acceptable for a pilot** (one deployment, a small
-  number of patients, changes infrequent enough that manual env-var edits
-  plus a restart are tolerable) but does not scale cleanly to many
-  patients being added/removed/rotated frequently by a live Backend.
+`SMRITI_API_KEYS` (a JSON object, one entry per key) supports three value shapes:
 
-## Future scalable design (not implemented — for joint review)
+1. **Single patient**: `"the-key": "elder-1"` — one key, one fixed identity. Unchanged
+   original design.
+2. **Fixed allow-list**: `"the-key": ["elder-1", "elder-2"]` — one key, an explicit,
+   hand-maintained list of patients. Adding a patient to this list still requires an
+   env-var edit and a restart — this mode is unchanged and remains appropriate for a small,
+   infrequently-changing pilot roster.
+3. **Dynamic (production)**: `"the-key": {"dynamic": true}` (optionally with a seed
+   `"user_ids": [...]`) — one key whose authorized patient set is the union of that seed
+   list and whatever has been durably *granted* to this exact credential in the database.
+   **This is the mode that removes the manual-env-var bottleneck.**
 
-A later mechanism, if/when pilot scale is outgrown, should preserve every
-guarantee above while removing the manual-env-var bottleneck:
+## How a dynamic key gains a new patient, with no env-var edit and no restart
 
-- **Backend-authenticated gateway remains the only caller.** VoiceBot's
-  own credential model doesn't need to change shape — it still authorizes
-  a caller for a set of patient identities. What changes is how that
-  mapping is managed.
-- **Server-side credential management**, likely backed by a small durable
-  store (its own table, not Supabase — VoiceBot does not gain unrestricted
-  Supabase access under this design either) that VoiceBot's auth
-  dependency reads instead of a single environment variable, so adding a
-  patient does not require a process restart.
-- **Stable external patient UUID** — unchanged from today; still the
-  caller's own identifier (e.g. the Supabase patient UUID), passed through
-  as `user_id`.
-- **Explicit provisioning and explicit authorization stay two separate
-  steps**, exactly as today — provisioning a patient must never implicitly
-  grant every key access to it.
-- **Disable/revoke** — same guarantee as today, ideally exposed as an
-  explicit operation rather than only reachable by resending a full memory
-  snapshot.
-- **Credential rotation** — a documented, ideally toolable, procedure with
-  no memory loss, same as today's manual one but without a full-process
-  restart.
-- **Auditability** — who provisioned/revoked/rotated which patient's
-  access, and when. Nothing today records this beyond process logs.
-- **No credentials in Flutter or the browser** — unchanged; this was true
-  before and remains non-negotiable after.
-- **No VoiceBot unrestricted Supabase access** — unchanged; VoiceBot
-  remains a separate service consuming a Backend-mediated contract, never
-  a second writer against Supabase's own schema.
+1. Backend authenticates its own credential to VoiceBot with `x-api-key` (a dynamic key).
+2. Backend calls `POST /v1/memory/sync` for a `user_id` (the Supabase patient UUID) this
+   credential has never used before. Unlike a fixed-list key, a dynamic key is allowed to
+   name a brand-new `user_id` here — this is the one and only place a dynamic key can
+   introduce a patient it wasn't already authorized for.
+3. Only if that sync call **succeeds** (not on a rejected/stale/conflicting one), VoiceBot
+   records one row in `backend_key_grants`: `(SHA-256 hash of the key, user_id)`. This is
+   an explicit, auditable grant — never a wildcard evaluated at request time. A dynamic
+   key with zero grants and no seed list is authorized for nothing until its first
+   successful sync, exactly like the original single-`user_id` auto-provisioning behavior.
+4. Every subsequent request — `/v1/conversation`, `/v1/conversation/voice`, job polling,
+   cancellation, audio retrieval — checks membership in the union of the seed list and the
+   database grants for that credential. No route ever trusts a client-supplied `user_id`
+   without this check.
+5. `POST /v1/memory/sync` with `"active": false` disables the patient across every
+   conversational/voice endpoint, independent of the grant — unchanged from before, and
+   this is also today's revoke mechanism (see "What is still not built" below).
+
+## What was preserved exactly, unchanged, from the original pilot design
+
+- **Stable patient identity.** `user_id` remains VoiceBot's own primary key; a Supabase
+  UUID is accepted as-is, with no translation layer.
+- **Authorization separate from provisioning.** A grant does not create a memory row by
+  itself, and a memory row's existence does not by itself grant access — these remain two
+  separate checks (`authorized_user_ids` vs. `ensure_patient_active`/the row itself).
+- **No wildcard, ever.** `"*"` or "this key plus any `user_id` the caller sends" was never
+  implemented and still is not — every authorization, fixed-list or dynamic, is one
+  specific (credential, `user_id`) pair, checked by membership.
+- **No VoiceBot unrestricted Supabase access.** VoiceBot still never talks to Supabase
+  directly; it only ever receives what the Backend sends it.
+- **No credentials in Flutter or the browser.**
+
+## What is still not built (honest gap, not silently implied)
+
+- **No separate "revoke a grant" endpoint.** Today, "revoked" means `active: false`
+  (blocks use) — the `backend_key_grants` row itself is never deleted, so a re-enabled
+  patient regains access with no new grant needed. If a genuine "permanently forget this
+  grant" operation is wanted later (distinct from disable/re-enable), it does not exist yet.
+- **No credential-rotation tooling specific to dynamic keys beyond what already existed**
+  (`tests/integration/test_credential_rotation.py` covers the original single/fixed-list
+  modes; rotating a dynamic key's own secret value is an env-var change like any other key
+  — the grants themselves, keyed by the old key's hash, would need re-granting under a new
+  key's hash, which is not automated).
+- **No dedicated audit log beyond process logs.** A grant is a normal database write, not
+  yet mirrored to a separate audit trail.
 
 ## What this document is not
 
-This is not a commitment to build a specific technology (no database,
-API shape, or library is prescribed here) and not a schedule. It is a
-statement of the properties any future mechanism must keep, so a
-scale-up conversation with the Backend team starts from an agreed list of
-non-negotiables rather than from scratch.
+Not a commitment to build the two items above on any particular schedule — they are
+recorded here as genuinely open, not silently closed by this change.

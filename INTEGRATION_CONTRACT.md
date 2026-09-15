@@ -70,9 +70,14 @@ See `SECURITY.md` §Authentication for full detail; summary for integration purp
 - **Single-user mode** (`SMRITI_API_KEY` + `SMRITI_AUTH_USER_ID`): one key, one fixed
   `user_id`. This is the current live pilot configuration (`elder-1`).
 - **Multi-user mode** (`SMRITI_API_KEYS`, a JSON map): each key maps to one `user_id`
-  (string) or an explicit list of `user_id`s (a genuine multi-patient backend key). A caller
-  can never claim a `user_id` outside what its key authorizes — every route checks this
-  server-side, never trusting the request body alone.
+  (string), an explicit fixed list of `user_id`s, or a **dynamic** object
+  `{"dynamic": true}` (optionally with a seed `"user_ids": [...]`). A caller can never
+  claim a `user_id` outside what its key authorizes — every route checks this server-side,
+  never trusting the request body alone. A dynamic key's authorized set grows only through
+  its own successful `POST /v1/memory/sync` calls (see §6 and `PROVISIONING_DESIGN.md`) —
+  this is the production mechanism for adding a patient with **no env-var edit and no
+  restart**, while remaining a set of explicit, durable, auditable grants, never a
+  wildcard.
 - **Identity VoiceBot expects**: `user_id` is VoiceBot's own primary key for a patient —
   any string matching `[A-Za-z0-9\-_.]{1,64}`. **Send your Backend's own stable patient
   identifier here** (e.g. a Supabase UUID) if you want a 1:1 mapping with no translation
@@ -274,8 +279,15 @@ protects it — verified: `test_retried_confirmation_with_same_idempotency_key_e
 
 ## 6. Memory sync contract
 
-Full detail: `HANDOFF.md`, `BACKEND_APP_DEVELOPER_BACKGROUND.md`. Summary:
+Full detail: `HANDOFF.md`, `BACKEND_APP_DEVELOPER_BACKGROUND.md`,
+`PROVISIONING_DESIGN.md`. Summary:
 
+- **Provisioning, for a dynamic key.** If your credential is configured as `{"dynamic":
+  true}` in `SMRITI_API_KEYS`, this call is also how you add a genuinely new patient —
+  call it once for a `user_id` your credential has never used before, and (only on
+  success) it becomes durably authorized for every other endpoint, with no env-var edit
+  and no restart on VoiceBot's side. Fixed-list and single-`user_id` keys are unaffected —
+  they still require the `user_id` to already be in their configured set.
 - **Full-snapshot, per-category replace.** Each of `family_members`/`medicines`/
   `daily_routines` you send replaces that patient's entire caregiver-synced set for that
   category; an empty array clears it; omitting a category is not the same as an empty array

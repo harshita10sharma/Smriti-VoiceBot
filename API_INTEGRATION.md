@@ -242,6 +242,13 @@ Your backend's own database is the source of truth for a patient's family,
 medicines and daily routine. Whenever that data changes, push the **complete
 current set** for that patient:
 
+**If your credential is a dynamic backend key** (`SMRITI_API_KEYS` configured as
+`{"dynamic": true}` for it — see `PROVISIONING_DESIGN.md`), this call also *provisions*
+a new patient: the first successful sync for a `user_id` your key hasn't used before
+durably authorizes it for every other endpoint, with no VoiceBot-side config change or
+restart. A fixed-list or single-`user_id` key is unaffected by this — it still requires
+the `user_id` to already be in its configured set.
+
 ```
 POST /v1/memory/sync
 Content-Type: application/json

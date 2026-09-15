@@ -125,8 +125,12 @@ schemas.
 **Authentication fails closed.** All personal-data endpoints require `x-api-key` (never
 `Authorization: Bearer`) — the VoiceBot credential is server-side only and must never
 reach Flutter or a browser. `SMRITI_AUTH_USER_ID` binds a single-user deployment's
-credential to one stable identity; `SMRITI_API_KEYS` supports multiple authorized
-identities per key for a real Backend gateway. Missing personal-endpoint configuration
+credential to one stable identity — **a development/staging fixture, not the production
+multi-user mechanism**; it is silently ignored whenever `SMRITI_API_KEYS` is set, so it
+can never become the production identity source by accident. `SMRITI_API_KEYS` is the
+production mechanism: a fixed explicit list of patients per key, or a **dynamic** key
+whose authorized patients grow via its own `POST /v1/memory/sync` calls with no env-var
+edit or restart (see `PROVISIONING_DESIGN.md`). Missing personal-endpoint configuration
 returns `503`, not open access. `SMRITI_ALLOW_UNAUTHENTICATED=1` only relaxes the key
 check for local development.
 

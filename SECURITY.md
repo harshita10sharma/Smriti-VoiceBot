@@ -79,14 +79,20 @@ two mutually exclusive modes:
 - **Single-user** (`SMRITI_API_KEY` + `SMRITI_AUTH_USER_ID`, the default): one shared key
   bound to exactly one identity. Submitted `user_id` values that do not match return
   **403**. This is the current live deployment — one elder per key.
-- **Multi-user / backend** (`SMRITI_API_KEYS`, a JSON object): each key's value is either
-  a single user id (one key, one patient — identical guarantee to single-user mode) or a
-  **list** of user ids — an explicit allow-list letting one backend key act as any of
-  several named patients, and only those. A request's `user_id` is checked for
-  *membership* in that list, never accepted as-is; an id outside the list returns **403**,
-  the same as a mismatched single-user id. Malformed configuration (invalid JSON, an
-  empty list, a non-string entry) fails closed with **503** rather than silently
-  narrowing to single-user behaviour.
+- **Multi-user / backend** (`SMRITI_API_KEYS`, a JSON object): each key's value is a
+  single user id (one key, one patient — identical guarantee to single-user mode), a
+  **fixed list** of user ids — an explicit allow-list letting one backend key act as any
+  of several named patients, and only those — or a **dynamic** object
+  (`{"dynamic": true}`), whose allow-list is the union of an optional seed list and
+  whatever has been durably granted to that exact credential in `backend_key_grants`
+  (see `PROVISIONING_DESIGN.md`). In every case, a request's `user_id` is checked for
+  *membership* in the resulting set, never accepted as-is; an id outside it returns
+  **403**, the same as a mismatched single-user id. Malformed configuration (invalid
+  JSON, an empty list, an unrecognized object shape) fails closed with **503** rather
+  than silently narrowing to single-user behaviour. A dynamic key's grants are created
+  only by that same credential's own successful `POST /v1/memory/sync` calls — never by
+  any other route, never by a value the caller merely claims, and never as a wildcard
+  evaluated at request time.
 
 With no key configured at all, or no identity/authorization resolvable on a personal
 endpoint, the service returns **503**, not open access. The legacy command endpoint

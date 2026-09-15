@@ -82,6 +82,7 @@ for the evidence-cited breakdown of every item above.
 | Monitoring | **BLOCKED** | No metrics/alerting exists in this repository; `/v1/health` is the only machine-checkable signal today |
 | Backup | **READY** | See DATABASE above |
 | Rollback | **PARTIAL** | Migrations are forward-only and additive; rolling back application code to an older commit against a newer-schema database is untested and not recommended without restoring a matching backup first |
+| Concurrency (measured, live) | **NEEDS ATTENTION** | Real load smoke test against the live AWS deployment (2026-09-15): 10 sequential text requests, 9/10 succeeded, 1 timed out at 30s; 2 simultaneous text requests, only 1/2 succeeded, the other timed out at 40s. Container logs confirmed the root cause was `llm_provider_failed`/`LLMError` from Groq itself during that window — CPU stayed at 0.15%, memory at 1.17GB/7.6GB, zero container restarts, so this is not an EC2/resource problem. 2 simultaneous voice requests succeeded (2/2). Concurrency beyond that was not tested. **Recommendation before any multi-user official demo**: add retry-with-backoff around the Groq call, or explicitly warn testers that simultaneous use may produce occasional slow/failed replies. |
 
 ### Deployment target: AWS — LIVE
 

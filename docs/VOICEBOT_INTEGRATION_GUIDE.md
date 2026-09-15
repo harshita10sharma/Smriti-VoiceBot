@@ -18,6 +18,33 @@ remain pending** — see `docs/RELEASE_ACCEPTANCE.md`.
 - [`../TESTING.md`](../TESTING.md) — what the deterministic test mode proves and does not prove.
 - [`../docs/RELEASE_ACCEPTANCE.md`](RELEASE_ACCEPTANCE.md) — the final status matrix, evidence-cited.
 
+## What to send each team
+
+**BACKEND DEVELOPER RECEIVES:**
+- `docs/BACKEND_VOICEBOT_INTEGRATION.md`
+- `docs/VOICEBOT_INTEGRATION_GUIDE.md` (this document)
+- `INTEGRATION_CONTRACT.md`
+- `API_INTEGRATION.md`
+- `SECURITY.md`
+- `LANGUAGE_SUPPORT.md`
+- The live base URL (`https://15-206-144-216.nip.io`)
+- A VoiceBot API credential, sent through a secure out-of-band channel — never in a
+  document, chat message, or commit
+- A staging patient UUID/fixture to develop against
+
+**FLUTTER DEVELOPER RECEIVES:**
+- `docs/FLUTTER_VOICEBOT_INTEGRATION.md`
+- `docs/VOICEBOT_INTEGRATION_GUIDE.md` (this document)
+- `INTEGRATION_CONTRACT.md`
+- `API_INTEGRATION.md`
+- `LANGUAGE_SUPPORT.md`
+- Your Backend's own API base URL and authentication details
+
+**Flutter does NOT receive**, under any circumstance: the VoiceBot API key, the Groq key,
+the Sarvam key, the Hugging Face token, any AWS credential, or any `.env` file. Flutter
+talks only to the Backend — see §1 and `docs/FLUTTER_VOICEBOT_INTEGRATION.md`'s "You never
+call VoiceBot directly" note.
+
 ---
 
 ## 1. Architecture

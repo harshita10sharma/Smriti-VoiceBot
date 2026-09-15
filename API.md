@@ -1,8 +1,17 @@
 # API contract
 
-Base URL: `http://<host>:8080` · Version: `5.0.0` · Content type: `application/json` unless stated.
+> **Supporting reference, not authoritative.** `INTEGRATION_CONTRACT.md` is the
+> authoritative behavioral/ownership contract; `API_INTEGRATION.md` is the current
+> endpoint-by-endpoint reference audited against the live schemas. This document predates
+> both and is kept for its worked low-level examples — where it disagrees with either,
+> they win. `http://<host>:8080` below is a **generic local-development placeholder**, not
+> a current or historical production URL — the current live deployment is
+> `https://15-206-144-216.nip.io` (see `docs/AWS_DEPLOYMENT.md`).
 
-Every example below was captured from the running service, not written from memory.
+Base URL: `http://<host>:8080` (generic local-dev placeholder — see note above) ·
+Version: `5.0.0` · Content type: `application/json` unless stated.
+
+Every example below was captured from a running service, not written from memory.
 
 ---
 

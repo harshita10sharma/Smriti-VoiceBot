@@ -207,3 +207,13 @@ the full offline/degraded matrix.
 No VoiceBot credential, no provider credential (Groq/Sarvam/etc.), anywhere in the app
 binary, its configuration, or its logs. Everything patient-identifying that leaves the
 device goes to your own Backend over your existing authenticated channel.
+
+## 24. Physical-device E2E — status: PENDING
+
+**Not yet performed and cannot be claimed complete from this repository alone** — it
+requires a real device, a real Backend gateway, and real human speech (not synthetic
+TTS-generated audio, which is what this repository's own live verification used). Once a
+Backend gateway and this Flutter integration both exist, the acceptance sequence is:
+record real speech → your Backend → VoiceBot → job → poll → audio → playback, plus alarm
+interruption, network loss mid-request, and re-pairing during an active request — see the
+`Q. Final E2E checklist` in `../HANDOFF.md` for the exact list.

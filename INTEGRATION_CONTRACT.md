@@ -6,9 +6,25 @@ this file was published with — not a plan, not a proposal, not an aspiration. 
 below was checked against source and, where marked, against a real running deployment or a
 deterministic test harness (`tests/integration/test_e2e_contract_harness.py`).
 
-This supersedes nothing — `HANDOFF.md`, `SECURITY.md` and `LANGUAGE_SUPPORT.md` remain the
-detailed references for their topics and are consistent with this document. Use this file as
-the single starting point; follow the cross-references for depth.
+**This is the authoritative behavioral and ownership contract for VoiceBot integration.**
+Where any other document in this repository disagrees with a claim here, this document is
+correct and the other should be treated as stale and fixed. The full document hierarchy:
+
+1. **`INTEGRATION_CONTRACT.md`** (this file) — authoritative behavioral/ownership contract.
+2. `docs/VOICEBOT_INTEGRATION_GUIDE.md` — master practical integration walkthrough.
+3. `docs/BACKEND_VOICEBOT_INTEGRATION.md` — Backend-specific implementation guide.
+4. `docs/FLUTTER_VOICEBOT_INTEGRATION.md` — Flutter-specific implementation guide.
+5. `API_INTEGRATION.md` — detailed endpoint/request/response reference.
+6. `SECURITY.md` — security and privacy reference.
+7. `LANGUAGE_SUPPORT.md` — language capability reference.
+8. `docs/RELEASE_ACCEPTANCE.md` — verification/acceptance status.
+9. `docs/integration/` — machine-readable schemas and acceptance artifacts.
+
+Every other document (`HANDOFF.md`, `BACKEND_APP_DEVELOPER_BACKGROUND.md`, `API.md`,
+`CODEBASE_STATUS.md`, `EVALUATION.md`, `STAGING_READINESS.md`, `ARCHITECTURE.md`,
+`AUDIT.md`, `TESTING.md`, `PROVISIONING_DESIGN.md`, and everything under `docs/` not
+listed above) is supporting, historical, architectural, testing, or deployment reference —
+useful detail, never an authority that overrides this contract or the guides above it.
 
 **Status legend used throughout this document:**
 - **VERIFIED BY VOICEBOT** — implemented, tested (automated and/or live against

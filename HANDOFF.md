@@ -3,7 +3,9 @@
 Practical integration handoff for the Backend and Flutter teams. Current live deployment:
 `https://15-206-144-216.nip.io` (see `docs/AWS_DEPLOYMENT.md`). For a narrative
 walkthrough, use `docs/VOICEBOT_INTEGRATION_GUIDE.md`; this document is the detail-level
-reference, organized A–Q:
+reference, organized A–Q. **`INTEGRATION_CONTRACT.md` remains the authoritative
+behavioral/ownership contract** — this document is supporting detail, not a competing
+authority.
 
 **A.** Backend responsibilities · **B.** Flutter responsibilities · **C.** VoiceBot
 responsibilities · **D.** Authentication · **E.** Patient identity · **F.** Memory

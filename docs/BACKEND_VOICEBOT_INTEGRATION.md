@@ -10,8 +10,21 @@ inspecting the actual `Abhayk777/SMRITI` client repository — no edge function,
 credential handling for VoiceBot exists there today). This document is the exact
 step-by-step for building it.
 
-**VoiceBot base URL:** `https://15-206-144-216.nip.io` — live now, AWS `ap-south-1`,
-real HTTPS. Point your gateway's `VOICEBOT_BASE_URL` at this.
+**Backend does NOT re-implement VoiceBot's ASR, LLM, TTS, safety, or memory logic.** Every
+step below is either a proxy/transform of your own Supabase data into VoiceBot's contract,
+or a pass-through call to VoiceBot — never a reimplementation of what VoiceBot already
+does. If a step here looks like it's asking you to duplicate conversation logic, safety
+screening, or model calls, that's a documentation bug — stop and check
+`INTEGRATION_CONTRACT.md` §0 (ownership map) instead of writing it.
+
+**Configuration your gateway needs** (no secret values appear in this document):
+```
+VOICEBOT_BASE_URL=https://15-206-144-216.nip.io
+VOICEBOT_AUTH_HEADER=x-api-key
+VOICEBOT_API_KEY=<PROVIDED SECURELY — never committed, never in this document>
+```
+Live now, AWS `ap-south-1`, real HTTPS via Caddy. See `docs/AWS_DEPLOYMENT.md` for the
+deployment itself.
 
 ## 1. Authenticate your own app/device request
 

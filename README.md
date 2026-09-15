@@ -12,12 +12,16 @@ v5 is an **extension of v4.1, not a replacement.** The v4.1 command router still
 first on every turn and still has final authority over actions. See `AUDIT.md` for the
 migration record.
 
-**Integrating with the Backend or Flutter team? Start with
+**Integrating with the Backend or Flutter team?** `INTEGRATION_CONTRACT.md` is the
+**authoritative** behavioral/ownership contract — where any other document disagrees with
+it, the contract wins. For the practical walkthrough, start with
 [`docs/VOICEBOT_INTEGRATION_GUIDE.md`](docs/VOICEBOT_INTEGRATION_GUIDE.md)** — the master
-practical integration reference, verified against this codebase's actual behavior and the
-live deployment below. `docs/BACKEND_VOICEBOT_INTEGRATION.md` and
-`docs/FLUTTER_VOICEBOT_INTEGRATION.md` are the step-by-step guides for each team;
-`INTEGRATION_CONTRACT.md` remains the detailed contract reference.
+integration reference, verified against this codebase's actual behavior and the live
+deployment below, including exactly which documents each team should receive.
+`docs/BACKEND_VOICEBOT_INTEGRATION.md` and `docs/FLUTTER_VOICEBOT_INTEGRATION.md` are the
+step-by-step implementation guides for each team. Every other document in this repository
+is supporting, historical, architectural, testing, or deployment reference — see the table
+below for the full hierarchy.
 
 ---
 

@@ -1,5 +1,13 @@
 # Smriti VoiceBot v5.0.0 — Backend & App Developer Background
 
+> **Supporting/background reference, not authoritative.** This document does not supersede
+> anything. The authoritative hierarchy is `INTEGRATION_CONTRACT.md` (behavioral/ownership
+> contract) → `docs/VOICEBOT_INTEGRATION_GUIDE.md` (master walkthrough) →
+> `docs/BACKEND_VOICEBOT_INTEGRATION.md` / `docs/FLUTTER_VOICEBOT_INTEGRATION.md`
+> (implementation guides) → `API_INTEGRATION.md` (endpoint reference) → `SECURITY.md` /
+> `LANGUAGE_SUPPORT.md` / `docs/RELEASE_ACCEPTANCE.md`. Where this document and any of
+> those disagree, they are correct and this document is stale.
+
 **Audience:** the backend developer and mobile/app developer integrating with the deployed
 Smriti VoiceBot HTTP API.
 **Status:** §1 below reflects the **current live AWS deployment**. Sections §2, §11, and §12
@@ -9,12 +17,7 @@ still-useful worked examples, not descriptions of the current database or git st
 current git commit and test count, see `CODEBASE_STATUS.md` and `CHANGELOG.md`. The
 API/contract content in the remaining sections (auth, memory sync, voice architecture,
 endpoints, errors) is current and was re-verified against this codebase and the live AWS
-deployment. `docs/VOICEBOT_INTEGRATION_GUIDE.md` and `docs/BACKEND_VOICEBOT_INTEGRATION.md`
-are the master references if this document and those ever disagree.
-
-This supersedes `HANDOFF.md` and `API_INTEGRATION.md` for onboarding purposes; those two files
-remain in the repository as the detailed endpoint reference and are consistent with everything
-stated here.
+deployment.
 
 ---
 

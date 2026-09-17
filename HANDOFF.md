@@ -47,6 +47,14 @@ never opens access). A caller-supplied `user_id` that isn't authorized for the p
 key → `403` — see **E** below. Generate a credential with
 `python -m smriti_voice.api.generate_key`.
 
+**Multi-patient credentials**: for production, configure a "dynamic" `SMRITI_API_KEYS`
+credential (`{"your-key": {"dynamic": true, "id": "backend-primary"}}`) instead of a fixed
+patient list — its authorized set grows automatically the first time it successfully syncs
+a given `user_id`, with no VoiceBot-side config change or restart, and it never becomes a
+wildcard. **Always set `id`**: it is what lets the secret be rotated later without losing
+every patient already granted. Full detail: `docs/BACKEND_VOICEBOT_INTEGRATION.md` §3–4,
+`PROVISIONING_DESIGN.md`.
+
 ## F. Memory synchronization
 
 See `API_INTEGRATION.md`'s "Endpoint: caregiver memory sync" section for the full request/
@@ -103,6 +111,13 @@ POST /v1/conversation
 x-api-key: <server key>
 {"user_id": "elder-1", "session_id": "abc123", "message": "What is my daughter's name?", "language": "eng"}
 ```
+
+**Set your HTTP client timeout to at least 65 seconds** for `/v1/conversation` and
+`/v1/conversation/voice`. Groq (the current LLM provider, free/shared tier) has been
+measured with single-call latency occasionally reaching ~35s even with zero concurrency;
+VoiceBot's own bounded retry adds up to another ~30s worst case before it gives up and
+returns gracefully. A shorter client timeout risks cancelling a request VoiceBot was still
+going to complete correctly.
 
 ### H. Voice request
 
@@ -238,7 +253,15 @@ not what might be ideal:
 Rejections: empty payload → **400**; not a valid/parseable WAV, or wrong content-type →
 **415**; over the byte or duration limit → **413**.
 
-## Language capability matrix (verified against this repository's actual code, not assumed)
+## Language capability matrix — pilot-scope subset only, NOT the full matrix
+
+**This table covers only the 6 languages most relevant to the current pilot** (`elder-1`'s
+configured languages plus the Northeast languages this project specifically targets). The
+service actually has **15** configured languages — for the complete matrix, see
+`LANGUAGE_SUPPORT.md` (human-readable, kept in sync with the code) or
+`docs/integration/language_matrix.json` (machine-readable, matches the live
+`GET /v1/languages` response format exactly). The 6 below (verified against this
+repository's actual code, not assumed):
 
 (See also `LANGUAGE_SUPPORT.md` for the generated, always-current version of this table.)
 

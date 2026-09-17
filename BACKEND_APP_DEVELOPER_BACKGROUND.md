@@ -151,12 +151,17 @@ exactly `elder-1`. Any request's `user_id` must equal `elder-1`, or it is reject
 | No key configured on the server at all | `503` (fails closed — never open access) |
 | Too many requests | `429` |
 
-**Multi-user architecture — implemented, not enabled here.** The codebase supports
-`SMRITI_API_KEYS`, a JSON map where each key's value is either a single user id (equivalent
-to single-user mode) or a **list** of user ids — a backend allow-list letting one key act as
-several named patients, with membership (not equality) checked against the request's
-`user_id`. This is available for a future multi-elder rollout but is **not active** in the
-current deployment, which remains single-user (`elder-1` only).
+**Multi-user architecture — implemented and live.** `SMRITI_API_KEYS` is a JSON map where
+each key's value is a single user id (equivalent to single-user mode), a **fixed list** of
+user ids (a backend allow-list letting one key act as several named patients, checked by
+membership, not equality), or a **dynamic** object
+(`{"dynamic": true, "user_ids": [...], "id": "..."}`) whose authorized set grows
+automatically the first time it successfully syncs a given patient via
+`POST /v1/memory/sync` — no env-var edit or restart needed. **The current production
+deployment runs a dynamic key** (seeded with `elder-1`, configured with a stable `id` so
+its secret can be rotated later without losing any granted patient) — this is not a future
+design, it is what is actually deployed today. See `PROVISIONING_DESIGN.md` and
+`docs/BACKEND_VOICEBOT_INTEGRATION.md` §3–4 for the full mechanism.
 
 **Patient UUID → VoiceBot `user_id` mapping.** VoiceBot's `user_id` is a plain string
 (`[A-Za-z0-9\-_.]{1,64}`) — a Supabase patient UUID is accepted **directly**, with no

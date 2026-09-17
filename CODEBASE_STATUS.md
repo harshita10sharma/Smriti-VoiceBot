@@ -1,21 +1,22 @@
 # Codebase status
 
-**Version:** 5.0.0 · **Date:** 2026-09-05 (original), updated 2026-09-15
+**Version:** 5.0.0 · **Date:** 2026-09-05 (original), updated 2026-09-16
 
 Status of every major component, stated precisely. Where something is unverified, this
 document says so rather than implying it works.
 
-## Current status — 2026-09-15
+## Current status — 2026-09-16
 
-The **280 passed** figure in "Verification performed" below, and every count/date further
-down this document, is a **historical snapshot from 2026-09-05** — preserved as-is, not
-updated in place, because it recorded real evidence at that time. It is not the current
-state. The current verified state:
+The **280 passed** and **625 passed** figures further down this document are **historical
+snapshots from 2026-09-05 and 2026-09-15 respectively** — preserved as-is, not updated in
+place, because each recorded real evidence at that time. Neither is the current state. The
+current verified state:
 
 | Check | Result |
 |---|---|
-| `pytest -q` | **625 passed, 0 failed** |
+| `pytest -q` | **655 passed, 0 failed** |
 | `tests/integration/test_memory_sync_versioning.py` | 17/17 passed |
+| `tests/integration/test_dynamic_backend_key_provisioning.py` | all passed (dynamic multi-patient provisioning, rotation-safe grants) |
 | `python -m compileall -q .` | clean |
 | `python tools/validate_config.py` | 0 errors |
 | `python tools/validate_packs.py` | 15/15 valid |
@@ -28,8 +29,10 @@ state. The current verified state:
 | Async voice jobs, cancellation, audio retrieval | Verified live |
 | Memory sync (apply, stale-rejection, conflict-rejection, no-op replay) | Verified live |
 | Patient isolation (401/403) | Verified live |
+| Dynamic multi-patient provisioning, simultaneous-patient isolation, cross-patient session-swap rejection, independent disable/re-enable | Verified live (full re-sweep, ~30 checks, 2026-09-16) |
 | Restart and full instance reboot recovery | Verified live |
-| Credential rotation (`SMRITI_API_KEY`, then Groq/Sarvam/HF) | Verified live |
+| Credential rotation (`SMRITI_API_KEY`, then Groq/Sarvam/HF, then a dynamic key's own secret with grants surviving via the `id` field) | Verified live |
+| Groq worst-case latency tuning | `SMRITI_MAX_RETRIES` set to `1` in production (was unset/`2`), bounding the worst case from ~90s to ~60s; Groq's own latency variance (up to ~35s on a single call) is a provider characteristic, not fixed by this change |
 
 See `docs/RELEASE_ACCEPTANCE.md` for the full evidence-cited matrix and
 `docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md` for the 19-section contract mapping.

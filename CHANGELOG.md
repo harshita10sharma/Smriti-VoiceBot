@@ -6,6 +6,103 @@ project has not yet cut a numbered release; entries below are grouped
 under the date each change actually landed, not a version number, since
 none has been assigned yet.
 
+## 2026-09-16 (later same day) — Integration-documentation audit: 12 real bugs found and fixed
+
+A full cross-document audit of every doc a Backend/Flutter developer would need, checked
+against each other and against actual source code (not each other's claims). Fixed:
+
+- **Wrong idempotency header name in the document declared authoritative**:
+  `INTEGRATION_CONTRACT.md` said `Idempotency-Key`; the real header is `X-Idempotency-Key`.
+  Following the doc literally would have silently disabled idempotency protection — no
+  error, just a retried side-effecting call double-executing. Fixed there and in
+  `integration/fixtures/voice_request.md`.
+- **Wrong field name in the Backend field-mapping table**: `docs/BACKEND_VOICEBOT_INTEGRATION.md`
+  mapped `people[].relationship` to `family_members[].relation`; the real field is
+  `relationship`. Since the model forbids unknown fields, following the table as written
+  would 422 on every sync.
+- **The `id` field for dynamic keys was undocumented in the authoritative auth docs**
+  (`SECURITY.md`, `INTEGRATION_CONTRACT.md` §1) despite being the thing that makes credential
+  rotation safe; `SECURITY.md` additionally made a blanket-false claim that rotation "loses
+  no patient data" for a dynamic key without `id`. Both fixed.
+- **Two docs falsely claimed dynamic provisioning was still unbuilt** (`CONTRACT_ACCEPTANCE_MATRIX.md`,
+  `VOICEBOT_INTEGRATION_GUIDE.md`), contradicting the code and `PROVISIONING_DESIGN.md`'s own
+  status. `BACKEND_APP_DEVELOPER_BACKGROUND.md` didn't mention dynamic mode at all and claimed
+  multi-user was "not active in the current deployment" — false; it is what's actually
+  deployed. All fixed.
+- **`docs/integration/language_matrix.json`'s `status` field never matched the real API**
+  (`"LanguageStatus.NOT_YET_TESTED"` instead of `"NOT_YET_TESTED"` — a classic Python
+  `str(Enum)` gotcha) for all 15 languages, and was missing 7 real response fields. Root
+  cause: it was hand-maintained despite claiming to be generated. Fixed permanently by adding
+  `tools/generate_language_matrix.py`, which derives the file directly from the same
+  `model_dump(mode='json')` call the live endpoint uses — it cannot drift again as long as
+  it's re-run after language changes.
+- **`LANGUAGE_SUPPORT.md` falsely claimed Assamese offline ASR works** (`yes`), and separately
+  claimed to be auto-generated when it was hand-maintained prose; both false claims corrected,
+  and its "known limitations" section for Assamese now includes the benchmark-only caveat
+  that was missing.
+- **Three real job `error_code` values were undocumented**: `TTS_WORKER_ERROR`,
+  `CANCELLED_BY_CLIENT`, `EMPTY_RESPONSE_TEXT`. `error_catalog.json` additionally claimed
+  `error_code` only appears on a terminal *failed* job — false, it also appears on
+  *cancelled* jobs. `ASR_UNAVAILABLE`/`NO_SPEECH_DETECTED` (real voice-turn error codes) were
+  missing from `INTEGRATION_CONTRACT.md`'s own error table. All fixed in both files.
+- **A real, silent validation gap, not just a doc mismatch**: `chosen_time_min` was never
+  actually checked against its own `window_start_min`/`window_end_min` in
+  `smriti_voice/schemas.py`, despite two docs already claiming it was enforced. Fixed in code
+  (`MemorySyncMedicine`'s validator now rejects it), with two new regression tests.
+- Narrower fixes: `API.md` didn't document the async voice-job architecture at all (described
+  `/v1/conversation/voice`'s response as if `audio_id` were populated immediately — it's
+  always `null` there); missing `WELCOME` turn kind; single-key-only auth section. Truncated
+  6-of-15-language tables in `INTEGRATION_CONTRACT.md`/`HANDOFF.md` now say so explicitly and
+  point to the full matrix. `job_status` (uppercase) vs job-polling `status` (lowercase)
+  casing difference documented. `user_id` regex documented as Unicode-aware, not strictly
+  ASCII. A dead-code fourth error envelope (`SmritiError` handler, unreachable on every
+  current path) documented rather than left silently contradicting a claim that no such
+  envelope exists. Added explicit client-timeout guidance (≥65s) to
+  `docs/BACKEND_VOICEBOT_INTEGRATION.md` and `HANDOFF.md` given Groq's measured worst-case
+  latency. Corrected stale "625 passing"/"588+ tests" counts to the current 655 across
+  `README.md`, `CODEBASE_STATUS.md`, `EVALUATION.md`, `TESTING.md`,
+  `docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md`.
+- 655/655 tests passing (653 prior + 2 new regression tests for the medicine-window fix).
+
+## 2026-09-16 — Dynamic multi-patient provisioning, rotation-safe grants, live reliability tuning
+
+- Added dynamic multi-patient authorization for backend API keys (`cefcf53`): a
+  `SMRITI_API_KEYS` credential can now be configured as `{"dynamic": true, ...}`, growing its
+  authorized patient set automatically the first time it successfully syncs a given
+  `user_id` via `POST /v1/memory/sync` — no env-var edit or restart needed to add a patient.
+  It never becomes a wildcard: an unsynced `user_id` is still `403`, exactly like a
+  fixed-list key. Backed by a new `backend_key_grants` table (migration 7).
+- Added test coverage for simultaneous multi-patient conversations, and session/memory/job/
+  audio/cancellation isolation, and independent disable/re-enable across patients (`e3ab93c`).
+- Documented the mechanism as implemented (previously described as a future design) in
+  `PROVISIONING_DESIGN.md`, `docs/BACKEND_VOICEBOT_INTEGRATION.md`, and
+  `INTEGRATION_CONTRACT.md` (`b1afb46`).
+- Fixed: `/v1/health`'s `authentication_configured` field was blind to `SMRITI_API_KEYS`,
+  reporting authentication as unconfigured even in a correctly configured multi-user
+  deployment (`1eb0514`).
+- Fixed: a dynamic key's grants were scoped to the SHA-256 hash of its own secret value, so
+  rotating that secret (a routine security practice) silently orphaned every patient already
+  granted to it, each requiring one repeat sync to re-authorize. Fixed by adding an optional,
+  operator-set stable `id` field — grants are now scoped to `id` when present, surviving
+  secret rotation with zero manual steps; two keys sharing an `id` are rejected at config
+  load. Found live, by rotating a production secret and observing real patients return `403`
+  after having worked correctly moments before; fix verified live by rotating a second time
+  and confirming zero re-granting was needed (`c37f211`).
+- Full live re-sweep of the deployed service (~30 checks: auth matrix, safety refusal,
+  command routing, multi-user provisioning/isolation, simultaneous-patient text,
+  cross-patient session-swap rejection, disable/re-enable independence, memory-sync
+  revisioning, prompt-injection resistance, real voice round trip, cancellation,
+  language-endpoint honesty) passed cleanly once test-harness contention and script bugs in
+  the sweep tooling itself were ruled out — no VoiceBot defect found.
+- Fixed: production's `SMRITI_MAX_RETRIES` was unset (defaulting to `2`), giving Groq's own
+  SDK retry loop a worst-case wall-clock of ~90s (3 attempts × the 30s per-attempt timeout)
+  during provider latency spikes. Set explicitly to `1` in
+  `deployment/aws/.env.production.local` and redeployed (container restart only), halving the
+  worst case to ~60s without reducing single-attempt reliability. Groq's own latency variance
+  (confirmed up to ~35s on a single, non-retried call) remains a property of its free/shared
+  tier, not something fixable in this codebase.
+- 653/653 tests passing.
+
 ## 2026-09-15 — Live AWS deployment, real provider verification, documentation consolidation
 
 - Deployed to AWS for real: EC2 `m7i-flex.large` (`ap-south-1`), persistent 30 GB EBS at

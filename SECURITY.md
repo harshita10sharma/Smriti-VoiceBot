@@ -83,9 +83,15 @@ two mutually exclusive modes:
   single user id (one key, one patient — identical guarantee to single-user mode), a
   **fixed list** of user ids — an explicit allow-list letting one backend key act as any
   of several named patients, and only those — or a **dynamic** object
-  (`{"dynamic": true}`), whose allow-list is the union of an optional seed list and
-  whatever has been durably granted to that exact credential in `backend_key_grants`
-  (see `PROVISIONING_DESIGN.md`). In every case, a request's `user_id` is checked for
+  (`{"dynamic": true, "user_ids": [...], "id": "..."}`), whose allow-list is the union of
+  an optional seed list (`user_ids`) and whatever has been durably granted to that
+  credential in `backend_key_grants` (see `PROVISIONING_DESIGN.md`). **Grants are scoped
+  by the optional `id` field when present, not by the secret's own hash** — always set
+  `id` to a stable label for a dynamic key used in production: without it, rotating the
+  key's secret value orphans every patient already granted (each then needs one repeat
+  sync to re-authorize); with a stable `id`, every grant survives rotation with zero
+  manual steps. Two keys configured with the same `id` are rejected at config load. In
+  every case, a request's `user_id` is checked for
   *membership* in the resulting set, never accepted as-is; an id outside it returns
   **403**, the same as a mismatched single-user id. Malformed configuration (invalid
   JSON, an empty list, an unrecognized object shape) fails closed with **503** rather
@@ -264,8 +270,12 @@ explicitly, not just implied by the sections above:
 - **Credential rotation**: rotating `SMRITI_API_KEY`/`SMRITI_API_KEYS` requires updating the
   environment variable and restarting the process (no in-place reload); rotating a cloud
   provider key (`SARVAM_API_KEY`, `GROQ_API_KEY`, etc.) is the same. Neither operation loses
-  any patient data — memory, sessions and voice jobs are keyed by `user_id`, never by the API
-  key itself.
+  any patient *data* — memory, sessions and voice jobs are keyed by `user_id`, never by the
+  API key itself. **For a dynamic `SMRITI_API_KEYS` key specifically, rotating its own secret
+  value does lose that credential's *authorization* to previously-granted patients unless the
+  key was configured with a stable `id`** (see above) — the underlying patient data is
+  unaffected, but the rotated credential gets `403` until each patient re-syncs once (or,
+  correctly, never loses access at all if `id` was set before rotating).
 - **A real, measured latency observation** (recorded here since it directly bears on the
   "should the whole voice turn be async" question, not just TTS): with the real Groq LLM
   provider and a stubbed ASR stage (no cloud/local ASR is reachable in this development

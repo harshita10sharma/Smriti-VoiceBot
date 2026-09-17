@@ -117,8 +117,14 @@ Supabase patients.id  (a UUID, the real system of record)
   route stays reachable even for a disabled patient, specifically so re-enabling is
   possible. Re-enabling never resets memory (verified:
   `tests/integration/test_patient_lifecycle.py`).
-- **Credential rotation**: change which key maps to this `user_id` (an env var change +
-  restart today — see `PROVISIONING_DESIGN.md` for the future scalable mechanism). The old
+- **Credential rotation**: changing which key maps to this `user_id` for a fixed-list key
+  is an env var change + restart. **A "dynamic" `SMRITI_API_KEYS` credential
+  (`{"dynamic": true, "id": "..."}`) instead grows its authorized patient set
+  automatically** on each new patient's first successful `POST /v1/memory/sync` — no env
+  var edit or restart needed to add a patient — and, when configured with a stable `id`,
+  survives its own secret being rotated with zero re-granting needed (implemented, not a
+  future design: `PROVISIONING_DESIGN.md`,
+  `tests/integration/test_dynamic_backend_key_provisioning.py`). Either way, the old
   credential is rejected immediately; the new one works for the same patient identity with
   all memory/sessions intact (verified live, `tests/integration/test_credential_rotation.py`).
 
@@ -366,9 +372,14 @@ Field-by-field mapping guidance for a real Supabase-shaped source: `../INTEGRATI
 
 ## 12. Language matrix
 
-Machine-readable, generated from the live registry:
-[`docs/integration/language_matrix.json`](integration/language_matrix.json).
-Also live at runtime: `GET /v1/languages`.
+Machine-readable, generated from the live registry by `tools/generate_language_matrix.py`
+(re-run it after any language-pack or capability change — never hand-edit the JSON, that is
+exactly how it drifted from the real API's format before):
+[`docs/integration/language_matrix.json`](integration/language_matrix.json) — **15
+languages configured**; its `status` values match the live API's format exactly
+(`"NOT_YET_TESTED"`, not `"LanguageStatus.NOT_YET_TESTED"`). Also live at runtime:
+`GET /v1/languages`. The inline table below is a **6-language pilot-scope subset**, not
+the full 15 — see the JSON file or `LANGUAGE_SUPPORT.md` for the rest.
 
 | Frontend code | VoiceBot code | ASR | LLM | TTS | Status | Notes |
 |---|---|---|---|---|---|---|

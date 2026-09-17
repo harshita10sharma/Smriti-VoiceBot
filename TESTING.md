@@ -55,7 +55,7 @@ fixtures (`tests/conftest.py`) build an `Application` against an
 in-memory SQLite database and construct mock LLM/TTS providers directly
 where a test needs one — real provider credentials are never required to
 run the suite, and a machine with none configured still gets the full
-588+ tests passing.
+655+ tests passing (count as of 2026-09-16; see `CHANGELOG.md` for the dated history).
 
 To run only a subset while iterating:
 

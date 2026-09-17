@@ -15,9 +15,11 @@ Flutter or the browser — verified (`tests/unit/test_privacy_data_minimization.
 Supabase UUID directly (no translation layer needed); authorization enforced independently
 of provisioning via `SMRITI_API_KEYS`; disable/re-enable via `active`; credential rotation
 verified to preserve memory (`tests/integration/test_credential_rotation.py`); cross-patient
-isolation verified across session/job/audio/memory. Scalable-beyond-env-var provisioning is
-documented as future design (`PROVISIONING_DESIGN.md`), not implemented — acceptable for a
-pilot per that document's own explicit scope.
+isolation verified across session/job/audio/memory. Scalable-beyond-env-var provisioning
+(a "dynamic" `SMRITI_API_KEYS` credential whose authorized set grows automatically on first
+sync per patient, with a stable `id` field surviving credential rotation) is **implemented**,
+not merely designed — `tests/integration/test_dynamic_backend_key_provisioning.py`,
+`PROVISIONING_DESIGN.md`, live-verified on the deployed instance (2026-09-16).
 
 ## 3. Persistent conversation ownership
 **VOICEBOT PASS.** SQLite-backed session ownership, restart-surviving
@@ -141,6 +143,6 @@ isolation, session-restart ownership, provisioning/revocation, sync edge cases, 
 schedules, deceased handling, prompt injection (text/voice/memory), invalid/oversized audio,
 queue/restart/timeout/cancellation/expiry, duplicate-action prevention, confirmation expiry,
 provider-failure honesty, and secret redaction are all covered by real tests in this
-repository's own `pytest -q` (625 passing). The physical-device joint acceptance run itself
+repository's own `pytest -q` (655 passing). The physical-device joint acceptance run itself
 (`docs/RELEASE_ACCEPTANCE.md`'s EXTERNAL table) has not happened and cannot happen from this
 repository alone.

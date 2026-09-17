@@ -398,6 +398,11 @@ class MemorySyncMedicine(BaseModel):
         if v is not None and start is not None and v < start:
             raise ValueError('window_end_min must be >= window_start_min '
                              '(non-wrapping window only; see SECURITY.md)')
+        chosen = info.data.get('chosen_time_min')
+        if v is not None and start is not None and chosen is not None \
+                and not (start <= chosen <= v):
+            raise ValueError('chosen_time_min must fall within '
+                             '[window_start_min, window_end_min]')
         return v
 
 

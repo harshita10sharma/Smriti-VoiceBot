@@ -186,6 +186,20 @@ def test_out_of_range_chosen_time_min_is_rejected(client, auth_headers):
     assert resp.status_code == 422
 
 
+def test_chosen_time_min_outside_its_own_window_is_rejected(client, auth_headers):
+    resp = sync(client, auth_headers,
+               medicines=[{'name': 'X', 'chosen_time_min': 100,
+                          'window_start_min': 420, 'window_end_min': 540}])
+    assert resp.status_code == 422
+
+
+def test_chosen_time_min_at_the_edges_of_its_window_is_accepted(client, auth_headers):
+    resp = sync(client, auth_headers,
+               medicines=[{'name': 'X', 'chosen_time_min': 420,
+                          'window_start_min': 420, 'window_end_min': 540}])
+    assert resp.status_code == 200
+
+
 # --------------------------------------------------------------------------- #
 # The revision hash must cover every field in the snapshot, not just the
 # three synced arrays -- a caregiver-only field change (timezone, language,

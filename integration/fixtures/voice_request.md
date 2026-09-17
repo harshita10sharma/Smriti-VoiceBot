@@ -5,7 +5,7 @@ Not representable as plain JSON (it's `multipart/form-data`). Real `curl` exampl
 ```bash
 curl -X POST https://your-deployment/v1/conversation/voice \
   -H "x-api-key: $VOICEBOT_API_KEY" \
-  -H "Idempotency-Key: optional-client-chosen-string" \
+  -H "X-Idempotency-Key: optional-client-chosen-string" \
   -F "audio_wav=@utterance.wav;type=audio/wav" \
   -F "user_id=elder-1" \
   -F "session_id=8ed26ef3e630462f8443a0268819d000" \

@@ -93,7 +93,7 @@ never see:
 | `version` (your `content_version`) | → | `source_revision`, if you adopt revisioning |
 | `people[].id` | → | `family_members[].external_id` |
 | `people[].name` | → | `family_members[].name` |
-| `people[].relationship` | → | `family_members[].relation` |
+| `people[].relationship` | → | `family_members[].relationship` |
 | `people[].memory_prompt` | → | `family_members[].memory_prompt` |
 | `people[].is_deceased` | → | `family_members[].is_deceased` |
 | `medications[].id` | → | `medicines[].external_id` |
@@ -151,6 +151,16 @@ Headers: x-api-key: <your VoiceBot credential>
 ```
 Return the response body to Flutter largely as-is; you decide how much of `metadata` your
 client needs.
+
+**Set your own HTTP client timeout to at least 65 seconds for this call.** The current LLM
+provider (Groq, on its free/shared tier) has been measured with single-call latency
+occasionally reaching ~35s with zero concurrency; combined with VoiceBot's own bounded retry
+(`SMRITI_MAX_RETRIES=1` in production, tuned 2026-09-16 specifically to cap this), the
+worst-case wall-clock before VoiceBot itself gives up and returns a graceful
+`llm_unavailable`-style response is ~60s. A shorter client-side timeout risks your gateway
+cancelling/retrying a request VoiceBot was still going to complete correctly — don't use
+`X-Idempotency-Key` retry logic to paper over an impatient timeout; extend the timeout
+instead.
 
 ## 9. Proxy voice requests
 

@@ -274,7 +274,7 @@ This plan has been executed. As of this writing:
 | EBS | 30 GB gp3 at `/data`, `DeleteOnTermination: false` |
 | HTTPS | Caddy, real Let's Encrypt certificate, automatic renewal |
 | Domain | `15-206-144-216.nip.io` (free wildcard DNS to the Elastic IP — no domain purchased) |
-| Image | `smriti-voicebot:32dfa49` (git short hash) |
+| Image | `smriti-voicebot:c37f211` (git short hash, matches `HEAD`) |
 
 **Verified live, with real evidence, not merely deployed**: authenticated text conversation,
 welcome, deterministic safety refusal, cross-patient/missing/invalid-auth rejection (403/401),
@@ -291,6 +291,25 @@ to be Free-Tier eligible on this account. Its CPU is burstable/credit-based rath
 dedicated -- a real, measured consequence: Indic Parler-TTS generation took 20-27s for short
 utterances (see `SMRITI_TTS_TIMEOUT_S=60` in `env.template`, raised from the 30s default for
 exactly this reason).
+
+### Post-launch reliability tuning (2026-09-16)
+
+A comprehensive live re-sweep (~30 checks: auth matrix, safety refusal, command routing,
+multi-user provisioning/isolation, simultaneous-patient text, cross-patient session-swap
+rejection, disable/re-enable independence, memory-sync revisioning, prompt-injection
+resistance, real voice round trip, cancellation, language-endpoint honesty) passed cleanly.
+The one real, actionable finding: **Groq's own single-call latency varies from ~300ms up to
+~35s even with zero concurrency** — confirmed by isolating one non-retried call, and by
+container logs showing `llm_provider_failed` → a graceful `llm_unavailable` fallback rather
+than a hang. Because production runs `SMRITI_LLM_PROVIDER=groq` explicitly (no fallback
+chain), a slow Groq call has nothing to fail over to. `SMRITI_MAX_RETRIES` had been left
+unset (defaulting to `2`), giving a worst-case wall-clock of ~90s (3 attempts × the 30s
+per-attempt timeout) before the SDK gives up. Set explicitly to `1` in
+`deployment/aws/.env.production.local` and redeployed (container restart only, no rebuild
+needed) — halves the worst case to ~60s without reducing single-attempt reliability. This
+bounds the problem; it does not remove Groq's own latency variance, which is a property of
+the provider's free/shared tier, not of this codebase. See `STAGING_READINESS.md` §OPERATIONS
+for the corresponding status-table entry.
 
 ### Real defects found only by actually deploying (all fixed, commit `32dfa49`)
 - `torchaudio` resolved to a CUDA-linked build from the default PyPI index (parler_tts/

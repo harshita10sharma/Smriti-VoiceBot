@@ -10,7 +10,7 @@
       "note": "detail is a LIST of field errors here, not a string -- this is FastAPI/Pydantic's default shape, unchanged."
     },
     "job_error_code": {
-      "shape": "GET /v1/voice/jobs/{job_id} response field 'error_code', only present on a terminal failed job",
+      "shape": "GET /v1/voice/jobs/{job_id} response field 'error_code', present on a terminal 'failed' job AND on a terminal 'cancelled' job (CANCELLED_BY_CLIENT) -- never on 'completed'",
       "note": "the only place a genuinely machine-readable, stable code exists today."
     }
   },
@@ -32,7 +32,10 @@
     {"error_code": "PROCESSING_TIMEOUT", "meaning": "Synthesis exceeded the deadline", "job_terminal_status": "failed", "retryable": true, "client_action": "Re-submit"},
     {"error_code": "INTERRUPTED_BY_RESTART", "meaning": "Process restarted mid-job", "job_terminal_status": "failed", "retryable": true, "client_action": "Re-submit"},
     {"error_code": "NO_TTS_PROVIDER_SUPPORTS_LANGUAGE", "meaning": "No configured TTS for this language", "job_terminal_status": "failed", "retryable": false, "client_action": "Show text only"},
-    {"error_code": "TTS_UNAVAILABLE", "meaning": "Provider call itself failed", "job_terminal_status": "failed", "retryable": true, "client_action": "Show text only for now"}
+    {"error_code": "TTS_UNAVAILABLE", "meaning": "Provider call itself failed", "job_terminal_status": "failed", "retryable": true, "client_action": "Show text only for now"},
+    {"error_code": "EMPTY_RESPONSE_TEXT", "meaning": "Nothing to speak (blank response text)", "job_terminal_status": "failed", "retryable": false, "client_action": "Show text only"},
+    {"error_code": "TTS_WORKER_ERROR", "meaning": "Uncaught exception in the TTS worker thread", "job_terminal_status": "failed", "retryable": true, "client_action": "Re-submit; log and alert if it recurs"},
+    {"error_code": "CANCELLED_BY_CLIENT", "meaning": "Client called POST /v1/voice/jobs/{id}/cancel before completion", "job_terminal_status": "cancelled", "retryable": false, "client_action": "Not an error; expected result of a client-initiated cancel"}
   ],
   "voice_turn_error_codes": [
     {"error_code": "ASR_UNAVAILABLE", "meaning": "Speech-to-text could not run at all (provider/network failure)", "note": "TurnKind.ERROR; response_text is a safe apology, session_id is still real and continuable"},

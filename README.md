@@ -211,7 +211,7 @@ python tools/smoke_test.py --base-url https://15-206-144-216.nip.io   # against 
 ## Testing and current verification status
 
 ```bash
-pytest -q                      # full test suite: 625 passed
+pytest -q                      # full test suite: 655 passed
 pytest tests/safety -q         # safety and red-team assertions
 python -m compileall -q .
 ```

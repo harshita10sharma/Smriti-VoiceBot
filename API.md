@@ -19,7 +19,7 @@ Every example below was captured from a running service, not written from memory
 
 | Header | Value |
 |---|---|
-| `x-api-key` | must equal the server's `SMRITI_API_KEY` |
+| `x-api-key` | must equal the server's `SMRITI_API_KEY`, **or be authorized under `SMRITI_API_KEYS` in multi-user mode** — this file only documents the single-key case; see `SECURITY.md` and `INTEGRATION_CONTRACT.md` §1 for `SMRITI_API_KEYS` (fixed-list and dynamic multi-patient modes), which is what the current production deployment actually runs |
 | `x-request-id` | *optional.* Alphanumeric, ≤64 chars. Echoed back as `request_id`. Ignored if malformed. |
 
 Personal endpoints also require `SMRITI_AUTH_USER_ID` on the server. The submitted
@@ -124,6 +124,7 @@ The main endpoint. Use it for text input and to test the whole stack without aud
 | `REFUSAL` | The safety layer refused | Show/speak `response_text`. Never retry automatically |
 | `FALLBACK` | No model was reachable; answered from saved data | Show/speak `response_text` |
 | `ERROR` | Could not serve the turn | Show `response_text`, offer the touch fallback |
+| `WELCOME` | Deterministic greeting from `POST /v1/conversation/welcome` (undocumented in this file — see `INTEGRATION_CONTRACT.md`) | Show/speak `response_text` |
 
 ### `action` — the only executable values
 
@@ -203,16 +204,29 @@ Upload validation (checked before any decoder touches the bytes):
 | Not RIFF/WAVE, truncated, or missing a `data` chunk | **415** |
 | Wrong `Content-Type` | **415** |
 
+**TTS is asynchronous — this response does NOT include finished audio.** When `speak=true`
+and a provider could plausibly synthesize the language, this response's `audio_id`/
+`audio_url`/`tts_provider` are `null` and `audio_available` is `false`; instead the response
+carries a `job_id` and `job_status` (`"QUEUED"`, or `"NOT_REQUESTED"` if `speak=false`/no
+provider). **Poll `GET /v1/voice/jobs/{job_id}` every 1–2s** until `status` is terminal
+(`completed`/`failed`/`cancelled`) — only the polling response's own `audio_id` is usable to
+fetch audio. `POST /v1/voice/jobs/{job_id}/cancel` cancels it early. This is not documented
+further in this file — see `INTEGRATION_CONTRACT.md` §4/§8 and
+`docs/BACKEND_VOICEBOT_INTEGRATION.md` §9/§11/§12 for the full job lifecycle, which this
+file predates.
+
 **Response** — everything from `/v1/conversation` plus:
 
 | Field | Type | Meaning |
 |---|---|---|
 | `transcript` | string | What ASR heard |
-| `audio_id` | string \| null | Opaque 32-char hex handle |
-| `audio_url` | string \| null | `/v1/audio/{audio_id}` |
-| `audio_available` | bool | **If `false`, show text only** |
+| `job_id` | string \| null | Poll `GET /v1/voice/jobs/{job_id}` for this turn's TTS |
+| `job_status` | string | `"QUEUED"` or `"NOT_REQUESTED"` on this initial response |
+| `audio_id` | string \| null | **Always `null` on this response** — populated only once the polled job completes |
+| `audio_url` | string \| null | **Always `null` on this response** — same caveat |
+| `audio_available` | bool | **Always `false` on this response** — check the polled job's own fields instead |
 | `audio_unavailable_reason` | string \| null | See below |
-| `tts_provider` | string \| null | Which provider spoke |
+| `tts_provider` | string \| null | **Always `null` on this response** — populated on the polled job |
 
 `audio_unavailable_reason` values:
 

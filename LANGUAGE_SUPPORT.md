@@ -1,9 +1,13 @@
 # Language support
 
-**This file is generated from the live capability matrix** by
-`python -c "from smriti_voice.language.registry import LanguageService"` — see
-`smriti_voice/language/capabilities.py`. It is regenerated whenever the matrix changes,
-so it cannot drift away from what the code actually does.
+**This file is hand-maintained prose over the live capability matrix**, not auto-generated
+— it previously claimed otherwise, which was false and let it drift out of sync with the
+code (an Assamese offline-ASR claim was found wrong and fixed 2026-09-16). The
+machine-readable, genuinely auto-generated source of truth is
+`docs/integration/language_matrix.json`, produced by `tools/generate_language_matrix.py`
+directly from `smriti_voice/language/registry.py`/`capabilities.py` — re-run that script
+after any language-pack change, and re-check this file against its output rather than
+assuming it's still accurate.
 
 ## The rule
 
@@ -31,7 +35,7 @@ That is the honest position, not a bug.
 
 | Code | Language | Script | Status | ASR online | ASR offline | LLM | TTS | Detection |
 |---|---|---|---|---|---|---|---|---|
-| `asm` | Assamese | Bengali-Assamese | `NOT_YET_TESTED` | yes | yes | yes | — | yes |
+| `asm` | Assamese | Bengali-Assamese | `NOT_YET_TESTED` | yes | no | yes | — | yes |
 | `ben` | Bengali | Bengali | `NOT_YET_TESTED` | yes | yes | yes | yes | yes |
 | `brx` | Bodo | Devanagari | `NOT_YET_TESTED` | yes | yes | — | — | yes |
 | `ccp` | Chakma | Chakma | `BENCHMARK_ONLY` | — | — | — | — | — |
@@ -74,9 +78,13 @@ it genuinely covers in `SMRITI_LOCAL_TTS_LANGUAGES`.
 
 **Assamese (`asm`)**
 - Sarvam Bulbul TTS does not list Assamese: cloud voice output is unavailable.
+- Local/offline ASR is **not currently working**: the configured local model's repository is
+  an empty placeholder on Hugging Face with no actual weights, so the pack was downgraded to
+  `benchmark_only` (2026-09-05) — `asr_offline` correctly reports `false`, not `yes`.
 - Assamese and Bengali share a script, so offline script detection cannot separate them unless the text contains an Assamese-only letter. Detection relies on NE-LID or the provider hint.
-- Speech input works online, but no configured provider can speak this language.
+- Speech input works online (Sarvam), but no configured provider can speak this language, and no configured provider can transcribe it offline.
 - No measured end-to-end validation record exists for this language.
+- Local model is benchmark-only: not validated on device with native speakers.
 
 **Bengali (`ben`)**
 - No measured end-to-end validation record exists for this language.

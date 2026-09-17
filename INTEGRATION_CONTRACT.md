@@ -71,15 +71,25 @@ See `SECURITY.md` §Authentication for full detail; summary for integration purp
   `user_id`. This is the current live pilot configuration (`elder-1`).
 - **Multi-user mode** (`SMRITI_API_KEYS`, a JSON map): each key maps to one `user_id`
   (string), an explicit fixed list of `user_id`s, or a **dynamic** object
-  `{"dynamic": true}` (optionally with a seed `"user_ids": [...]`). A caller can never
-  claim a `user_id` outside what its key authorizes — every route checks this server-side,
-  never trusting the request body alone. A dynamic key's authorized set grows only through
-  its own successful `POST /v1/memory/sync` calls (see §6 and `PROVISIONING_DESIGN.md`) —
-  this is the production mechanism for adding a patient with **no env-var edit and no
-  restart**, while remaining a set of explicit, durable, auditable grants, never a
-  wildcard.
+  `{"dynamic": true, "user_ids": [...], "id": "..."}` (`user_ids` is an optional seed
+  list; `id` is an optional but strongly recommended stable label — see below). A caller
+  can never claim a `user_id` outside what its key authorizes — every route checks this
+  server-side, never trusting the request body alone. A dynamic key's authorized set grows
+  only through its own successful `POST /v1/memory/sync` calls (see §6 and
+  `PROVISIONING_DESIGN.md`) — this is the production mechanism for adding a patient with
+  **no env-var edit and no restart**, while remaining a set of explicit, durable,
+  auditable grants, never a
+  wildcard. **Always set `id` on a production dynamic key.** Grants are scoped to `id`
+  when present, not to a hash of the key's own secret value — so `id` is what lets you
+  rotate the secret later without losing every patient already granted (omitting it means
+  a future rotation orphans them, each needing one repeat sync to re-authorize). Two keys
+  sharing the same `id` are rejected at config load.
 - **Identity VoiceBot expects**: `user_id` is VoiceBot's own primary key for a patient —
-  any string matching `[A-Za-z0-9\-_.]{1,64}`. **Send your Backend's own stable patient
+  any string matching `[A-Za-z0-9\-_.]{1,64}`, length-checked in ASCII terms but the actual
+  validator uses Python's Unicode-aware `str.isalnum()`, so it also accepts non-ASCII
+  alphanumeric characters (e.g. Devanagari digits) plus `-_.` — a UUID or any ASCII
+  identifier is always safe; don't rely on the pattern being strictly ASCII-only if you're
+  generating identifiers from non-Latin text. **Send your Backend's own stable patient
   identifier here** (e.g. a Supabase UUID) if you want a 1:1 mapping with no translation
   layer; VoiceBot does not require or assume any particular format.
 - **`external_id`** (on `users`, and per-record on `family_members`/`medicines`/
@@ -147,7 +157,7 @@ declare — nothing here is aspirational.
               "total_latency_ms": 640, "error_code": null, "topic": "personal"}}
 ```
 `kind` ∈ `COMMAND | CONVERSATION | MEMORY | CONFIRMATION | REFUSAL | FALLBACK | ERROR |
-WELCOME`. Idempotency: optional `Idempotency-Key` header — see §5.
+WELCOME`. Idempotency: optional `X-Idempotency-Key` header — see §5.
 
 ### 5. `POST /v1/conversation/voice` (multipart)
 Fields: `audio_wav` (file, required), `user_id`, `session_id` (optional), `language`
@@ -155,6 +165,12 @@ Fields: `audio_wav` (file, required), `user_id`, `session_id` (optional), `langu
 `transcript`, `job_id`, `job_status`, `audio_id` (always `null` here — TTS is async),
 `audio_url` (`null`), `audio_available` (`false`), `audio_unavailable_reason`,
 `tts_provider` (`null`). See §3 for the audio contract and §4 for the job lifecycle.
+
+**Casing note**: this response's `job_status` is uppercase (`"QUEUED"` or `"NOT_REQUESTED"`)
+— a different field, with a different casing convention, from the polling endpoint's own
+`status` (§4, lowercase: `"queued"`/`"processing"`/`"completed"`/`"failed"`/`"cancelled"`).
+Don't assume they share one enum or one case convention if you're writing a single
+case-sensitive switch across both.
 
 ### 6. `POST /v1/conversation/welcome`
 ```jsonc
@@ -250,14 +266,14 @@ Guarantees (each independently verified, see referenced tests):
   (`test_cancellation_prevents_stale_completion_end_to_end`).
 - **Ownership**: job/audio access outside your authorized patient set is `404`, identical to
   a nonexistent id.
-- **Duplicate submission**: send `Idempotency-Key` (§5) to guarantee exactly one job for a
+- **Duplicate submission**: send `X-Idempotency-Key` (§5) to guarantee exactly one job for a
   retried identical request (`test_duplicate_voice_submission_creates_exactly_one_job`).
 
 ---
 
 ## 5. Idempotency contract
 
-Optional `Idempotency-Key` header (any string, ≤128 chars) on `POST /v1/conversation` and
+Optional `X-Idempotency-Key` header (any string, ≤128 chars) on `POST /v1/conversation` and
 `POST /v1/conversation/voice`. Backed by a single shared store (`idempotency.py`), not a
 per-endpoint mechanism.
 
@@ -271,7 +287,7 @@ per-endpoint mechanism.
 
 `POST /v1/memory/sync` doesn't need a separate idempotency key: its full-replace semantics
 are already naturally idempotent (§6). Action **confirmation** (the "yes" turn) goes through
-`POST /v1/conversation` like any other turn, so the same `Idempotency-Key` mechanism already
+`POST /v1/conversation` like any other turn, so the same `X-Idempotency-Key` mechanism already
 protects it — verified: `test_retried_confirmation_with_same_idempotency_key_executes_once`
 (a retried "yes" never creates a reminder or places a call twice).
 
@@ -365,10 +381,16 @@ default shape, unchanged:
             "input": {...}}]}
 ```
 
-There is **no separate `error_code`/`retryable`/`request_id` envelope wrapping these** —
-introducing one now would be a breaking response-shape change for every existing client with
-no demonstrated need, so this document instead makes the *existing* shape and its stable
-`detail` text patterns the contract (see the table below for what each status/cause means).
+There is **no separate `error_code`/`retryable`/`request_id` envelope wrapping these on any
+currently-reachable request path** — introducing one now would be a breaking response-shape
+change for every existing client with no demonstrated need, so this document instead makes
+the *existing* shape and its stable `detail` text patterns the contract (see the table below
+for what each status/cause means). (A fourth handler exists in
+`smriti_voice/api/app.py` for an internal `SmritiError` exception type, returning
+`{"error": "<CODE>", "detail": "<msg>"}` at HTTP 400 — every current call site that could
+raise one already catches it internally before it would reach this handler, so it is
+unreachable dead code today, not a live fourth envelope shape. Flagged here rather than
+silently left undocumented, in case a future code change makes it reachable.)
 The one place a genuinely machine-readable, stable code already exists is the voice-job
 `error_code` field (`QUEUE_OVERLOADED`, `PROCESSING_TIMEOUT`, `INTERRUPTED_BY_RESTART`,
 `NO_TTS_PROVIDER_SUPPORTS_LANGUAGE`, `TTS_UNAVAILABLE`, etc.) — use that where it exists;
@@ -395,7 +417,16 @@ must branch on them, or prefer the HTTP status code, which is the actually-stabl
 | job `error_code=INTERRUPTED_BY_RESTART` | Process restarted mid-job | job terminal `failed` | Yes | Re-submit |
 | job `error_code=NO_TTS_PROVIDER_SUPPORTS_LANGUAGE` | No configured TTS for this language | job terminal `failed` | No (not a transient issue) | Show text only |
 | job `error_code=TTS_UNAVAILABLE` | Provider call itself failed | job terminal `failed` | Yes, later | Show text only for now |
+| job `error_code=EMPTY_RESPONSE_TEXT` | Nothing to speak (blank response text) | job terminal `failed` | No | Show text only |
+| job `error_code=TTS_WORKER_ERROR` | Uncaught exception in the TTS worker thread | job terminal `failed` | Yes | Re-submit; log and alert if it recurs |
+| job `error_code=CANCELLED_BY_CLIENT` | Client called the cancel endpoint before completion | job terminal `cancelled`, not `failed` | No | Not an error; expected result of a client-initiated cancel |
+| voice-turn `metadata.error_code=ASR_UNAVAILABLE` | Speech-to-text could not run at all | `kind: "ERROR"` | Yes, later | `response_text` is a safe apology; `session_id` stays valid and continuable |
+| voice-turn `metadata.error_code=NO_SPEECH_DETECTED` | ASR ran but the transcript was empty | `kind: "ERROR"` | Yes | Same guarantees as `ASR_UNAVAILABLE` |
 | `audio_expired: true` | Audio aged out of retention | — | N/A | Not an error; the text answer is still valid, audio is just gone |
+
+**Note**: `error_code` on a job is present on both terminal `failed` **and** terminal
+`cancelled` jobs (never on `completed`) — do not assume its mere presence means the job
+failed; check `status` first.
 
 No response body ever includes a stack trace, a provider credential, or a raw exception
 message beyond a short descriptive string (verified: `smriti_voice/logging.py`'s redaction
@@ -412,7 +443,7 @@ synchronization failed'`/`'Internal error'`-style text, never `str(exc)` directl
   format) and optionally also set `external_id` via memory sync for a second reference.
 - Push memory-sync snapshots on every caregiver change; own the `source_revision` sequence
   if you adopt versioning (§6) — VoiceBot never generates one itself.
-- Retry safely: use `Idempotency-Key` for conversation/voice calls you might resend.
+- Retry safely: use `X-Idempotency-Key` for conversation/voice calls you might resend.
 - Scope job/audio polling to the patient session that requested it.
 - Preserve the privacy boundary: caregiver access to a patient's profile does **not** imply
   access to that patient's private AI conversation history — that's a Backend-side
@@ -514,9 +545,12 @@ planning:
 
 ## 13. Language capability matrix
 
-See `HANDOFF.md`'s language table for the full, verified-against-source matrix (Hindi,
-Assamese, Meiteilon, Khasi, Mizo, English). Read `GET /v1/languages` live for current state
-— this document is a planning snapshot, not a runtime source of truth.
+**15 languages are configured** (see `LANGUAGE_SUPPORT.md` for the full human-readable
+matrix, or `docs/integration/language_matrix.json` for the machine-readable form matching
+the live API's field/value format exactly). `HANDOFF.md`'s language table covers only the
+6 most relevant to the current pilot (Hindi, Assamese, Meiteilon, Khasi, Mizo, English), not
+the full set. Read `GET /v1/languages` live for current state — every doc here is a
+snapshot, not a runtime source of truth.
 
 ---
 

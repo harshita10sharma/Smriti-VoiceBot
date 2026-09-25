@@ -30,6 +30,14 @@
 **[Getting started](#-getting-started)** ·
 **[Project layout](#-project-layout)**
 
+<br/>
+
+🟢 **[Live health](https://15-206-144-216.nip.io/v1/health)** ·
+📖 **[Live API docs (Swagger)](https://15-206-144-216.nip.io/docs)** ·
+🌐 **[Live language matrix](https://15-206-144-216.nip.io/v1/languages)** ·
+📦 **[This repo](https://github.com/harshita10sharma/Smriti-VoiceBot)** ·
+🏠 **[SMRITI caregiver web app](https://github.com/Abhayk777/SMRITI)**
+
 </div>
 
 ---

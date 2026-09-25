@@ -340,3 +340,134 @@ separately against the live AWS deployment above. See `EVALUATION.md` and
 </td>
 </tr>
 </table>
+
+**Overall status: ready for Backend integration.** Cross-system integration (a real
+Backend gateway, a real Flutter client) and physical-device acceptance remain pending —
+see `docs/RELEASE_ACCEPTANCE.md`. **Native-speaker language quality validation has not
+been performed for any language.**
+
+---
+
+## 🚀 Getting started
+
+```bash
+git clone https://github.com/harshita10sharma/Smriti-VoiceBot.git
+cd smriti-voicebot-v5.0.0
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env               # set SMRITI_API_KEY and SMRITI_AUTH_USER_ID
+python main.py --test-config       # checks configuration, contacts nothing
+pytest -q
+```
+
+<details>
+<summary><b>▶️ Running locally</b></summary>
+
+<br/>
+
+```bash
+python main.py --health                 # capability report
+python main.py --list-languages         # v4.1 language packs
+python main.py --seed-demo              # create the demo elder in SQLite
+python main.py --chat                   # interactive text chat
+
+uvicorn smriti_voice.api.app:app --host 0.0.0.0 --port 8000
+python tools/smoke_test.py --base-url https://15-206-144-216.nip.io   # against the live deployment
+```
+
+</details>
+
+<details>
+<summary><b>🧪 Testing and verification</b></summary>
+
+<br/>
+
+```bash
+pytest -q                      # full test suite: 655 passed
+pytest tests/safety -q         # safety and red-team assertions
+python -m compileall -q .
+```
+
+</details>
+
+<details>
+<summary><b>☁️ Deploy to AWS</b></summary>
+
+<br/>
+
+`deployment/aws/provision.sh` → `deployment/aws/first_boot_setup.sh` (on the instance) →
+build the image → `deployment/aws/deploy.sh` → `deployment/aws/smoke_test.sh`. Full plan,
+sizing rationale and cost estimate in `docs/AWS_DEPLOYMENT.md`.
+
+</details>
+
+> [!TIP]
+> What VoiceBot does **not** implement: real phone calling, real conversational-reminder
+> delivery, clinical diagnosis, prescription OCR, face recognition, clinical reporting,
+> game scoring, or fully offline general conversation. None of it is silently implied by
+> anything shipped here.
+
+---
+
+## 🗂 Project layout
+
+```text
+smriti-voicebot-v5.0.0/
+├── main.py                      CLI entry point (--health, --chat, --seed-demo, --test-config)
+├── smriti_voice/
+│   ├── api/                     FastAPI app, routes, dependencies (app.py, dependencies.py)
+│   ├── conversation/             turn routing, context, confirmation state
+│   ├── language/                 registry + capability matrix (registry.py, capabilities.py)
+│   ├── memory/                   personal memory + sync (seed.py, snapshot handling)
+│   ├── offline/                  offline fallback answers, health reporting
+│   ├── database/                 SQLite connection + persistence
+│   ├── voice_jobs.py              async TTS job lifecycle
+│   └── config.py                 environment-driven configuration
+├── config/                       language_validation.json and friends
+├── language_packs/               per-language content
+├── deployment/aws/                provision · first_boot_setup · deploy · smoke_test · rollback
+├── docs/
+│   ├── VOICEBOT_INTEGRATION_GUIDE.md   master integration reference — start here
+│   ├── BACKEND_VOICEBOT_INTEGRATION.md  step-by-step for the Backend developer
+│   ├── FLUTTER_VOICEBOT_INTEGRATION.md  step-by-step for the Flutter developer
+│   ├── AWS_DEPLOYMENT.md                current, live AWS deployment
+│   └── integration/                     OpenAPI, memory/action schemas, language matrix, error catalog
+├── tools/                        smoke_test.py, generate_language_matrix.py, validate_config.py, backup_db.py
+└── tests/                        unit · integration · multilingual · safety
+```
+
+<details>
+<summary><b>📚 Reference documents</b></summary>
+
+<br/>
+
+| File                                       | Contents                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `AUDIT.md`                                 | The pre-migration audit of v4.1 and what happened to each module                 |
+| `ARCHITECTURE.md`                          | Subsystems, turn flow, provider abstractions                                     |
+| `SECURITY.md`                              | Threat model, red-team results, what is enforced where                           |
+| `LANGUAGE_SUPPORT.md`                      | Generated capability matrix — configured vs. speakable vs. validated             |
+| `EVALUATION.md`                            | What was tested, what was mocked, what was live, what was not tested             |
+| `HANDOFF.md`                               | Practical integration handoff for the Backend/Flutter teams                      |
+| `INTEGRATION_CONTRACT.md`                  | The detailed API/ownership contract                                              |
+| `STAGING_READINESS.md`                     | What is actually demonstrated for pilot/staging, with evidence                   |
+| `CODEBASE_STATUS.md`                       | Component-by-component implementation status, dated                             |
+| `PROVISIONING_DESIGN.md`                   | Current pilot provisioning vs. a future scalable design (not implemented)        |
+| `CHANGELOG.md`                             | Notable changes, grouped by theme and dated from git history                     |
+| `docs/RELEASE_ACCEPTANCE.md`               | Evidence-based acceptance matrix for every requirement                           |
+| `docs/integration/CONTRACT_ACCEPTANCE_MATRIX.md` | All 19 integration-contract sections mapped to owner and status            |
+| `docs/AZURE_DEPLOYMENT.md`                 | Historical — Azure was evaluated before the target moved to AWS                  |
+
+</details>
+
+---
+
+<div align="center">
+
+**SMRITI VoiceBot** · _the voice on the other end, in their own language._
+
+<sub>Specs live in <code>docs/</code> · the authoritative contract is <a href="INTEGRATION_CONTRACT.md"><code>INTEGRATION_CONTRACT.md</code></a> · start integrating at <a href="docs/VOICEBOT_INTEGRATION_GUIDE.md"><code>docs/VOICEBOT_INTEGRATION_GUIDE.md</code></a></sub>
+
+</div>

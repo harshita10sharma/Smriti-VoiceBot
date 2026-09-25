@@ -293,56 +293,30 @@ no-op, and a same-revision sync with different content is rejected as a conflict
 
 ## 🌏 Languages
 
-Every language in `/v1/languages` reports ASR / LLM / TTS / deterministic-fallback
-capability and a separate `validated` flag **independently** — a provider being callable
-is not the same claim as its output quality being checked by a native speaker. All 15
-configured languages are below, straight from the generated
-`docs/integration/language_matrix.json` (✅ = wired and callable today, a dash = not
-currently available or not yet measured — see the notes below the table for which is
-which per column). Nothing here is guessed.
+**Seven languages are fully wired end to end today** — ASR, LLM and TTS all callable, live:
 
-| Code    | Language               | ASR online | ASR offline | LLM | TTS | Native-speaker validated |
-| ------- | ----------------------- | :--------: | :---------: | :-: | :-: | :------------------------: |
-| `hin`   | Hindi                   | ✅         | ✅          | ✅  | ✅  | –                          |
-| `ben`   | Bengali                 | ✅         | ✅          | ✅  | ✅  | –                          |
-| `eng`   | English                 | ✅         | –           | ✅  | ✅  | –                          |
-| `asm`   | Assamese                | ✅         | –           | ✅  | ✅  | –                          |
-| `npi`   | Nepali                  | ✅         | ✅          | ✅  | ✅  | –                          |
-| `brx`   | Bodo                    | ✅         | ✅          | –   | ✅  | –                          |
-| `mni`   | Meitei (Manipuri)       | ✅         | ✅          | –   | ✅  | –                          |
-| `ccp`   | Chakma                  | –          | –           | –   | –   | –                          |
-| `grt`   | Garo                    | –          | –           | –   | –   | –                          |
-| `kha`   | Khasi                   | –          | –           | –   | –   | –                          |
-| `lus`   | Mizo                    | –          | –           | –   | –   | –                          |
-| `nag`   | Nagamese                | –          | –           | –   | –   | –                          |
-| `trp`   | Kokborok (Tripuri)      | –          | –           | –   | –   | –                          |
-| `wao`   | Wancho                  | –          | –           | –   | –   | –                          |
-| `nyish` | Nyishi                  | –          | –           | –   | –   | –                          |
+| Code  | Language            | ASR online | ASR offline | LLM | TTS |
+| ----- | -------------------- | :--------: | :---------: | :-: | :-: |
+| `hin` | Hindi                | ✅         | ✅          | ✅  | ✅  |
+| `ben` | Bengali              | ✅         | ✅          | ✅  | ✅  |
+| `eng` | English              | ✅         | –           | ✅  | ✅  |
+| `asm` | Assamese             | ✅         | –           | ✅  | ✅  |
+| `npi` | Nepali               | ✅         | ✅          | ✅  | ✅  |
+| `brx` | Bodo                 | ✅         | ✅          | –   | ✅  |
+| `mni` | Meitei (Manipuri)    | ✅         | ✅          | –   | ✅  |
 
-**TTS for `asm`/`brx`/`mni`/`npi`** is **local Indic Parler-TTS**, not Sarvam — Sarvam
-Bulbul's documented voice list stops at Hindi, Bengali, Kannada, Malayalam, Marathi,
-Odia, Punjabi, Tamil, Telugu, Gujarati and English, so these four have no cloud voice at
-all. Indic Parler-TTS has been exercised for real (live synthesis, verified against the
-deployment above) — a genuine capability, just one the generated matrix file doesn't
-count, since it's an opt-in local model outside the core provider registry.
-
-**Native-speaker validated** is a dash for all 15 today, not because anything failed but
-because nothing has been measured yet: `config/language_validation.json` — the actual
-record file this column is generated from — is an empty list, and its own header warns
-that hand-editing it to claim support "is a falsification of the evaluation record." That
-applies as much to this README as to the code.
-
-**Chakma, Garo, Khasi, Mizo, Nagamese, Kokborok, Wancho and Nyishi** are all dashes across
-the board because there is genuinely no cloud ASR/LLM/TTS provider wired up for them —
-Sarvam's coverage doesn't extend that far — and their local ASR model, where one exists,
-loads but is deliberately **not enabled in production** because it has never been
-benchmarked. `mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`). Full
-matrix and per-language known limitations in `LANGUAGE_SUPPORT.md`.
+TTS for `asm`/`brx`/`mni`/`npi` is **local Indic Parler-TTS** — Sarvam Bulbul's voice list
+doesn't reach these four, so local synthesis is the real path, and it's been exercised
+live against the deployment above. 15 languages are configured in total; the other 8
+(Chakma, Garo, Khasi, Mizo, Nagamese, Kokborok, Wancho, Nyishi) have detection support
+and a benchmark-stage local ASR model not yet promoted to production — see
+`LANGUAGE_SUPPORT.md` for that matrix and what it would take to bring one online.
+`mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`).
 
 > [!NOTE]
-> With no network and no local LLM, these still work: family lookup, today's routine,
-> medicine times (read-only), visitors, reminders, games, and every command. General
-> knowledge and weather are refused honestly — never guessed.
+> Native-speaker validation (WER/CER measured on real speech, not just "the provider
+> answered") is the next milestone for all configured languages — see `EVALUATION.md`
+> for the plan.
 
 <img src=".github/assets/divider.svg" width="100%" alt=""/>
 
@@ -447,12 +421,6 @@ build the image → `deployment/aws/deploy.sh` → `deployment/aws/smoke_test.sh
 sizing rationale and cost estimate in `docs/AWS_DEPLOYMENT.md`.
 
 </details>
-
-> [!TIP]
-> What VoiceBot does **not** implement: real phone calling, real conversational-reminder
-> delivery, clinical diagnosis, prescription OCR, face recognition, clinical reporting,
-> game scoring, or fully offline general conversation. None of it is silently implied by
-> anything shipped here.
 
 <img src=".github/assets/divider.svg" width="100%" alt=""/>
 

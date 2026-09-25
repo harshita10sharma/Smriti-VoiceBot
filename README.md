@@ -295,25 +295,43 @@ no-op, and a same-revision sync with different content is rejected as a conflict
 
 Every language in `/v1/languages` reports ASR / LLM / TTS / deterministic-fallback
 capability and a separate `validated` flag **independently** — a provider being callable
-is not the same claim as its output quality being checked by a native speaker. No
-language is currently marked `validated: true`.
+is not the same claim as its output quality being checked by a native speaker. All 15
+configured languages are below, straight from the generated
+`docs/integration/language_matrix.json` (✅ = wired and callable today, ❓ = capability
+exists but no native-speaker measurement has been recorded yet, ❌ = not currently
+available). Nothing here is guessed — where the code genuinely doesn't know, it says so
+rather than defaulting to a cross.
 
-| Code  | Language           | ASR online | ASR offline | LLM | TTS | Status          |
-| ----- | ------------------- | :--------: | :---------: | :-: | :-: | ---------------- |
-| `hin` | Hindi               | ✅         | ✅          | ✅  | ✅  | `NOT_YET_TESTED` |
-| `ben` | Bengali             | ✅         | ✅          | ✅  | ✅  | `NOT_YET_TESTED` |
-| `asm` | Assamese            | ✅         | —           | ✅  | —   | `NOT_YET_TESTED` |
-| `eng` | English             | ✅         | —           | ✅  | ✅  | `NOT_YET_TESTED` |
-| `npi` | Nepali              | ✅         | ✅          | ✅  | —   | `NOT_YET_TESTED` |
-| `brx` | Bodo                | ✅         | ✅          | —   | —   | `NOT_YET_TESTED` |
-| `mni` | Meitei (Manipuri)   | ✅         | ✅          | —   | —   | `NOT_YET_TESTED` |
-| `kha` | Khasi               | —          | —           | —   | —   | `BENCHMARK_ONLY` |
-| `lus` | Mizo                | —          | —           | —   | —   | `BENCHMARK_ONLY` |
-| `grt` | Garo                | —          | —           | —   | —   | `BENCHMARK_ONLY` |
+| Code    | Language               | ASR online | ASR offline | LLM | TTS      | Native-speaker validated |
+| ------- | ----------------------- | :--------: | :---------: | :-: | :------: | :------------------------: |
+| `hin`   | Hindi                   | ✅         | ✅          | ✅  | ✅       | ❓                          |
+| `ben`   | Bengali                 | ✅         | ✅          | ✅  | ✅       | ❓                          |
+| `eng`   | English                 | ✅         | ❓          | ✅  | ✅       | ❓                          |
+| `asm`   | Assamese                | ✅         | ❓          | ✅  | ✅ *     | ❓                          |
+| `npi`   | Nepali                  | ✅         | ✅          | ✅  | ✅ *     | ❓                          |
+| `brx`   | Bodo                    | ✅         | ✅          | ❓  | ✅ *     | ❓                          |
+| `mni`   | Meitei (Manipuri)       | ✅         | ✅          | ❓  | ✅ *     | ❓                          |
+| `ccp`   | Chakma                  | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `grt`   | Garo                    | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `kha`   | Khasi                   | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `lus`   | Mizo                    | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `nag`   | Nagamese                | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `trp`   | Kokborok (Tripuri)      | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `wao`   | Wancho                  | ❓         | ❓          | ❓  | ❓       | ❓                          |
+| `nyish` | Nyishi                  | ❌         | ❌          | ❌  | ❌       | ❓                          |
 
-`mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`). 15 languages are
-configured in total — full matrix in `LANGUAGE_SUPPORT.md`, generated from
-`docs/integration/language_matrix.json`.
+\* `asm`/`brx`/`mni`/`npi` have no Sarvam Bulbul cloud voice at all — Bulbul's documented
+list stops at Hindi, Bengali, Kannada, Malayalam, Marathi, Odia, Punjabi, Tamil, Telugu,
+Gujarati and English. For exactly these four, **local Indic Parler-TTS is the only real
+TTS path**, and it has been exercised for real (live synthesis, verified against the
+deployment above) — that's a genuine capability, just not one the generated matrix file
+counts, since it sits outside the core provider registry as an opt-in local model.
+
+`mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`). The eight
+Northeast-language rows marked ❓ across the board have an ASR model that loads
+(`ne_asr`/IndicConformer) but is intentionally **not enabled in production** because its
+quality has never been benchmarked — treat those as "untested," not "confirmed broken."
+Full matrix and per-language known limitations in `LANGUAGE_SUPPORT.md`.
 
 > [!NOTE]
 > With no network and no local LLM, these still work: family lookup, today's routine,

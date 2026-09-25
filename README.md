@@ -245,3 +245,98 @@ provisioning/deploy/backup tooling.
 
 Gemini, OpenAI and local-LLM interfaces remain available where explicitly configured but
 are not the deployed path.
+
+---
+
+## 🔐 Security model
+
+Authentication fails closed and the model is never trusted to authorise anything by
+itself, so the codebase treats every rule below as a hard requirement.
+
+|  #  | Rule                                                                                                                             |
+| :-: | ----------------------------------------------------------------------------------------------------------------------------------- |
+|  1  | Every personal-data endpoint requires `x-api-key`; missing configuration returns `503`, never open access                          |
+|  2  | `SMRITI_AUTH_USER_ID` is a **dev/staging fixture only** — silently ignored whenever `SMRITI_API_KEYS` is set                       |
+|  3  | `SMRITI_API_KEYS` is the production mechanism: a fixed patient list per key, or a dynamic key whose patients grow via its own sync calls |
+|  4  | The model can **propose** a tool call; only the registry can **execute** one, and only after validation                            |
+|  5  | `action_accepted: true` means the deterministic layer authorised the action — **not proof of a real side effect**                  |
+|  6  | No real calling or reminder-scheduling executor exists in this repository by design — both are contract-ready, not wired to a phone |
+|  7  | Audio is never embedded in a JSON body or written to a log                                                                          |
+|  8  | Generated-audio ids expire (default 15 min) and are fetchable once                                                                  |
+|  9  | One Uvicorn worker, by design — `SessionStore`, the rate limiter and the Indic Parler-TTS model instance are all process-local      |
+| 10  | Sessions, pending confirmations and history are SQLite-persisted and survive a restart                                             |
+| 11  | A prompt-injection screen and a hard-coded safety refusal list run **before** any model sees the utterance                          |
+| 12  | `SMRITI_ALLOW_UNAUTHENTICATED=1` only relaxes the key check for local development                                                  |
+
+Full threat model and red-team results in `SECURITY.md`.
+
+### Memory synchronization
+
+VoiceBot's personal memory is a **synchronized copy, not the source of truth** —
+Supabase remains authoritative. `POST /v1/memory/sync` replaces a patient's
+family/medicine/routine records as a full, transactional snapshot, keyed by an optional
+`source_revision`: an older revision is rejected, an identical replay is a harmless
+no-op, and a same-revision sync with different content is rejected as a conflict. See
+[Memory synchronization](docs/VOICEBOT_INTEGRATION_GUIDE.md#7-memory-synchronization).
+
+---
+
+## 🌏 Languages
+
+Every language in `/v1/languages` reports ASR / LLM / TTS / deterministic-fallback
+capability and a separate `validated` flag **independently** — a provider being callable
+is not the same claim as its output quality being checked by a native speaker. No
+language is currently marked `validated: true`.
+
+| Code  | Language           | ASR online | ASR offline | LLM | TTS | Status          |
+| ----- | ------------------- | :--------: | :---------: | :-: | :-: | ---------------- |
+| `hin` | Hindi               | ✅         | ✅          | ✅  | ✅  | `NOT_YET_TESTED` |
+| `ben` | Bengali             | ✅         | ✅          | ✅  | ✅  | `NOT_YET_TESTED` |
+| `asm` | Assamese            | ✅         | —           | ✅  | —   | `NOT_YET_TESTED` |
+| `eng` | English             | ✅         | —           | ✅  | ✅  | `NOT_YET_TESTED` |
+| `npi` | Nepali              | ✅         | ✅          | ✅  | —   | `NOT_YET_TESTED` |
+| `brx` | Bodo                | ✅         | ✅          | —   | —   | `NOT_YET_TESTED` |
+| `mni` | Meitei (Manipuri)   | ✅         | ✅          | —   | —   | `NOT_YET_TESTED` |
+| `kha` | Khasi               | —          | —           | —   | —   | `BENCHMARK_ONLY` |
+| `lus` | Mizo                | —          | —           | —   | —   | `BENCHMARK_ONLY` |
+| `grt` | Garo                | —          | —           | —   | —   | `BENCHMARK_ONLY` |
+
+`mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`). 15 languages are
+configured in total — full matrix in `LANGUAGE_SUPPORT.md`, generated from
+`docs/integration/language_matrix.json`.
+
+> [!NOTE]
+> With no network and no local LLM, these still work: family lookup, today's routine,
+> medicine times (read-only), visitors, reminders, games, and every command. General
+> knowledge and weather are refused honestly — never guessed.
+
+---
+
+## 📊 By the numbers
+
+<table>
+<tr>
+<td width="55%">
+
+|                        |          |
+| ------------------------ | -------: |
+| 🧪 Test functions       |  **478** |
+| ✅ Full suite result     |  **655 passed** |
+| 🐍 Application code       | **~9,800 lines** |
+| 🔌 API endpoints         |   **11** |
+| 🌐 Configured languages  |   **15** |
+| 🧰 Registered tools      |   **21** |
+| 📚 Reference documents   |  **20+** |
+
+</td>
+<td width="45%" valign="top">
+
+Every test in this repository's own suite is **mocked/deterministic** — none makes a live
+provider call. Real-provider verification (Groq, Sarvam ASR/TTS, Indic Parler-TTS,
+voice jobs, memory sync, patient isolation, restart/reboot recovery) has been performed
+separately against the live AWS deployment above. See `EVALUATION.md` and
+`docs/RELEASE_ACCEPTANCE.md` for the evidence-cited breakdown.
+
+</td>
+</tr>
+</table>

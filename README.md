@@ -293,30 +293,36 @@ no-op, and a same-revision sync with different content is rejected as a conflict
 
 ## 🌏 Languages
 
-**Seven languages are fully wired end to end today** — ASR, LLM and TTS all callable, live:
+All 15 configured languages, straight from the generated
+`docs/integration/language_matrix.json` — ✅ where a provider is genuinely wired up and
+callable today, a dash where it isn't yet:
 
-| Code  | Language            | ASR online | ASR offline | LLM | TTS |
-| ----- | -------------------- | :--------: | :---------: | :-: | :-: |
-| `hin` | Hindi                | ✅         | ✅          | ✅  | ✅  |
-| `ben` | Bengali              | ✅         | ✅          | ✅  | ✅  |
-| `eng` | English              | ✅         | –           | ✅  | ✅  |
-| `asm` | Assamese             | ✅         | –           | ✅  | ✅  |
-| `npi` | Nepali               | ✅         | ✅          | ✅  | ✅  |
-| `brx` | Bodo                 | ✅         | ✅          | –   | ✅  |
-| `mni` | Meitei (Manipuri)    | ✅         | ✅          | –   | ✅  |
+| Code    | Language               | ASR online | ASR offline | LLM | TTS | Native-speaker validated |
+| ------- | ----------------------- | :--------: | :---------: | :-: | :-: | :------------------------: |
+| `hin`   | Hindi                   | ✅         | ✅          | ✅  | ✅  | –                          |
+| `ben`   | Bengali                 | ✅         | ✅          | ✅  | ✅  | –                          |
+| `eng`   | English                 | ✅         | –           | ✅  | ✅  | –                          |
+| `asm`   | Assamese                | ✅         | –           | ✅  | ✅  | –                          |
+| `npi`   | Nepali                  | ✅         | ✅          | ✅  | ✅  | –                          |
+| `brx`   | Bodo                    | ✅         | ✅          | –   | ✅  | –                          |
+| `mni`   | Meitei (Manipuri)       | ✅         | ✅          | –   | ✅  | –                          |
+| `ccp`   | Chakma                  | –          | –           | –   | –   | –                          |
+| `grt`   | Garo                    | –          | –           | –   | –   | –                          |
+| `kha`   | Khasi                   | –          | –           | –   | –   | –                          |
+| `lus`   | Mizo                    | –          | –           | –   | –   | –                          |
+| `nag`   | Nagamese                | –          | –           | –   | –   | –                          |
+| `trp`   | Kokborok (Tripuri)      | –          | –           | –   | –   | –                          |
+| `wao`   | Wancho                  | –          | –           | –   | –   | –                          |
+| `nyish` | Nyishi                  | –          | –           | –   | –   | –                          |
 
 TTS for `asm`/`brx`/`mni`/`npi` is **local Indic Parler-TTS** — Sarvam Bulbul's voice list
 doesn't reach these four, so local synthesis is the real path, and it's been exercised
-live against the deployment above. 15 languages are configured in total; the other 8
-(Chakma, Garo, Khasi, Mizo, Nagamese, Kokborok, Wancho, Nyishi) have detection support
-and a benchmark-stage local ASR model not yet promoted to production — see
-`LANGUAGE_SUPPORT.md` for that matrix and what it would take to bring one online.
-`mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`).
-
-> [!NOTE]
-> Native-speaker validation (WER/CER measured on real speech, not just "the provider
-> answered") is the next milestone for all configured languages — see `EVALUATION.md`
-> for the plan.
+live against the deployment above. The other 8 languages have detection support and, for
+most, a benchmark-stage local ASR model not yet promoted to production — see
+`LANGUAGE_SUPPORT.md` for the full matrix and what it would take to bring one online.
+Native-speaker validation (WER/CER measured on real speech) is the next milestone for
+every configured language, not yet recorded for any of them — see `EVALUATION.md` for
+the plan. `mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`).
 
 <img src=".github/assets/divider.svg" width="100%" alt=""/>
 

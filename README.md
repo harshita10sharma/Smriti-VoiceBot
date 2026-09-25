@@ -346,18 +346,29 @@ Full matrix and per-language known limitations in `LANGUAGE_SUPPORT.md`.
 <tr>
 <td width="55%">
 
-|                        |          |
-| ------------------------ | -------: |
-| 🧪 Test functions       |  **478** |
-| ✅ Full suite result     |  **655 passed** |
-| 🐍 Application code       | **~9,800 lines** |
-| 🔌 API endpoints         |   **11** |
-| 🌐 Configured languages  |   **15** |
-| 🧰 Registered tools      |   **21** |
-| 📚 Reference documents   |  **20+** |
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'pie1':'#BC5A3C','pie2':'#E8A83F','pie3':'#56633F','pie4':'#8C491A','pie5':'#8FA073','pie6':'#645C50','pieStrokeColor':'#F9F4ED','pieSectionTextColor':'#201E1D','pieOuterStrokeColor':'#F9F4ED','fontFamily':'Segoe UI, Helvetica, sans-serif'}}}%%
+pie showData
+    title Lines by area (smriti-voicebot-v5.0.0)
+    "Application code (smriti_voice/)" : 9803
+    "Tests" : 7399
+    "Documentation (*.md)" : 5040
+    "Config + language packs" : 855
+    "Tools (CLI utilities)" : 891
+    "AWS deployment scripts" : 758
+```
 
 </td>
 <td width="45%" valign="top">
+
+|                          |                    |
+| -------------------------- | -------------------: |
+| 🧪 Test functions          |             **478** |
+| ✅ Full suite result        |     **655 passed** |
+| 🔌 API endpoints           |              **11** |
+| 🌐 Configured languages    |              **15** |
+| 🧰 Registered tools        |              **21** |
+| 📚 Reference documents     |             **20+** |
 
 Every test in this repository's own suite is **mocked/deterministic** — none makes a live
 provider call. Real-provider verification (Groq, Sarvam ASR/TTS, Indic Parler-TTS,
@@ -494,7 +505,13 @@ smriti-voicebot-v5.0.0/
 
 <div align="center">
 
+<img src=".github/assets/logomark.svg" width="56" alt="SMRITI VoiceBot logomark"/>
+
 **SMRITI VoiceBot** · _the voice on the other end, in their own language._
+
+<sub>An independent FastAPI service, deployed and reachable on its own — see <a href="#-current-live-deployment">live deployment</a>. It plugs into the wider SMRITI product (<a href="https://github.com/Abhayk777/SMRITI">caregiver web app ↗</a>) as one module, but ships, runs and is tested standalone.</sub>
+
+<br/><br/>
 
 <sub>Specs live in <code>docs/</code> · the authoritative contract is <a href="INTEGRATION_CONTRACT.md"><code>INTEGRATION_CONTRACT.md</code></a> · start integrating at <a href="docs/VOICEBOT_INTEGRATION_GUIDE.md"><code>docs/VOICEBOT_INTEGRATION_GUIDE.md</code></a></sub>
 

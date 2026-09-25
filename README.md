@@ -297,41 +297,47 @@ Every language in `/v1/languages` reports ASR / LLM / TTS / deterministic-fallba
 capability and a separate `validated` flag **independently** — a provider being callable
 is not the same claim as its output quality being checked by a native speaker. All 15
 configured languages are below, straight from the generated
-`docs/integration/language_matrix.json` (✅ = wired and callable today, ❓ = capability
-exists but no native-speaker measurement has been recorded yet, ❌ = not currently
-available). Nothing here is guessed — where the code genuinely doesn't know, it says so
-rather than defaulting to a cross.
+`docs/integration/language_matrix.json` (✅ = wired and callable today, a dash = not
+currently available or not yet measured — see the notes below the table for which is
+which per column). Nothing here is guessed.
 
-| Code    | Language               | ASR online | ASR offline | LLM | TTS      | Native-speaker validated |
-| ------- | ----------------------- | :--------: | :---------: | :-: | :------: | :------------------------: |
-| `hin`   | Hindi                   | ✅         | ✅          | ✅  | ✅       | ❓                          |
-| `ben`   | Bengali                 | ✅         | ✅          | ✅  | ✅       | ❓                          |
-| `eng`   | English                 | ✅         | ❓          | ✅  | ✅       | ❓                          |
-| `asm`   | Assamese                | ✅         | ❓          | ✅  | ✅ *     | ❓                          |
-| `npi`   | Nepali                  | ✅         | ✅          | ✅  | ✅ *     | ❓                          |
-| `brx`   | Bodo                    | ✅         | ✅          | ❓  | ✅ *     | ❓                          |
-| `mni`   | Meitei (Manipuri)       | ✅         | ✅          | ❓  | ✅ *     | ❓                          |
-| `ccp`   | Chakma                  | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `grt`   | Garo                    | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `kha`   | Khasi                   | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `lus`   | Mizo                    | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `nag`   | Nagamese                | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `trp`   | Kokborok (Tripuri)      | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `wao`   | Wancho                  | ❓         | ❓          | ❓  | ❓       | ❓                          |
-| `nyish` | Nyishi                  | ❌         | ❌          | ❌  | ❌       | ❓                          |
+| Code    | Language               | ASR online | ASR offline | LLM | TTS | Native-speaker validated |
+| ------- | ----------------------- | :--------: | :---------: | :-: | :-: | :------------------------: |
+| `hin`   | Hindi                   | ✅         | ✅          | ✅  | ✅  | –                          |
+| `ben`   | Bengali                 | ✅         | ✅          | ✅  | ✅  | –                          |
+| `eng`   | English                 | ✅         | –           | ✅  | ✅  | –                          |
+| `asm`   | Assamese                | ✅         | –           | ✅  | ✅  | –                          |
+| `npi`   | Nepali                  | ✅         | ✅          | ✅  | ✅  | –                          |
+| `brx`   | Bodo                    | ✅         | ✅          | –   | ✅  | –                          |
+| `mni`   | Meitei (Manipuri)       | ✅         | ✅          | –   | ✅  | –                          |
+| `ccp`   | Chakma                  | –          | –           | –   | –   | –                          |
+| `grt`   | Garo                    | –          | –           | –   | –   | –                          |
+| `kha`   | Khasi                   | –          | –           | –   | –   | –                          |
+| `lus`   | Mizo                    | –          | –           | –   | –   | –                          |
+| `nag`   | Nagamese                | –          | –           | –   | –   | –                          |
+| `trp`   | Kokborok (Tripuri)      | –          | –           | –   | –   | –                          |
+| `wao`   | Wancho                  | –          | –           | –   | –   | –                          |
+| `nyish` | Nyishi                  | –          | –           | –   | –   | –                          |
 
-\* `asm`/`brx`/`mni`/`npi` have no Sarvam Bulbul cloud voice at all — Bulbul's documented
-list stops at Hindi, Bengali, Kannada, Malayalam, Marathi, Odia, Punjabi, Tamil, Telugu,
-Gujarati and English. For exactly these four, **local Indic Parler-TTS is the only real
-TTS path**, and it has been exercised for real (live synthesis, verified against the
-deployment above) — that's a genuine capability, just not one the generated matrix file
-counts, since it sits outside the core provider registry as an opt-in local model.
+**TTS for `asm`/`brx`/`mni`/`npi`** is **local Indic Parler-TTS**, not Sarvam — Sarvam
+Bulbul's documented voice list stops at Hindi, Bengali, Kannada, Malayalam, Marathi,
+Odia, Punjabi, Tamil, Telugu, Gujarati and English, so these four have no cloud voice at
+all. Indic Parler-TTS has been exercised for real (live synthesis, verified against the
+deployment above) — a genuine capability, just one the generated matrix file doesn't
+count, since it's an opt-in local model outside the core provider registry.
 
-`mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`). The eight
-Northeast-language rows marked ❓ across the board have an ASR model that loads
-(`ne_asr`/IndicConformer) but is intentionally **not enabled in production** because its
-quality has never been benchmarked — treat those as "untested," not "confirmed broken."
-Full matrix and per-language known limitations in `LANGUAGE_SUPPORT.md`.
+**Native-speaker validated** is a dash for all 15 today, not because anything failed but
+because nothing has been measured yet: `config/language_validation.json` — the actual
+record file this column is generated from — is an empty list, and its own header warns
+that hand-editing it to claim support "is a falsification of the evaluation record." That
+applies as much to this README as to the code.
+
+**Chakma, Garo, Khasi, Mizo, Nagamese, Kokborok, Wancho and Nyishi** are all dashes across
+the board because there is genuinely no cloud ASR/LLM/TTS provider wired up for them —
+Sarvam's coverage doesn't extend that far — and their local ASR model, where one exists,
+loads but is deliberately **not enabled in production** because it has never been
+benchmarked. `mni` is Meiteilon/Manipuri and is never mapped to Mongolian (`mn`). Full
+matrix and per-language known limitations in `LANGUAGE_SUPPORT.md`.
 
 > [!NOTE]
 > With no network and no local LLM, these still work: family lookup, today's routine,

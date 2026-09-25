@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎙 SMRITI VoiceBot
+<img src=".github/assets/banner.svg" alt="SMRITI VoiceBot — the voice on the other end, in their own language" width="100%"/>
+
+<br/>
 
 **Project:** SMRITI · **Project ID:** SIH26003YELLOW · **Module:** AI Voice Assistant
 
@@ -40,7 +42,7 @@
 
 </div>
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🪢 The idea
 
@@ -92,7 +94,7 @@ authoritative behavioral/ownership contract. For the practical walkthrough, star
 [`docs/VOICEBOT_INTEGRATION_GUIDE.md`](docs/VOICEBOT_INTEGRATION_GUIDE.md) — verified
 against this codebase's actual behavior and the live deployment below.
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## ✨ What it does
 
@@ -109,7 +111,7 @@ against this codebase's actual behavior and the live deployment below.
 | 🔄  | **Memory sync**               | `POST /v1/memory/sync` — a revisioned, transactional snapshot replace; stale and conflicting revisions are rejected, not applied |
 | 🧾  | **Legacy compatibility**      | `POST /v1/command` — the original v4.1 endpoint, kept for backward compatibility                                              |
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🏛 Architecture
 
@@ -145,7 +147,7 @@ does not authenticate end users, does not talk to Supabase, and does not know ab
 Flutter. Full split in
 [Ownership](docs/VOICEBOT_INTEGRATION_GUIDE.md#3-ownership).
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🧭 How a turn is decided
 
@@ -200,7 +202,7 @@ stateDiagram-v2
 Audio is never embedded in a JSON body or written to a log — a voice response carries an
 opaque `audio_id`, and the client fetches the bytes once (ids expire, default 15 min).
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🔌 API
 
@@ -228,7 +230,7 @@ schemas.
 > reach Flutter or a browser. Missing personal-endpoint configuration returns `503`, not
 > open access. See [Security model](#-security-model).
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## ☁️ Current live deployment
 
@@ -254,7 +256,7 @@ provisioning/deploy/backup tooling.
 Gemini, OpenAI and local-LLM interfaces remain available where explicitly configured but
 are not the deployed path.
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🔐 Security model
 
@@ -287,7 +289,7 @@ family/medicine/routine records as a full, transactional snapshot, keyed by an o
 no-op, and a same-revision sync with different content is rejected as a conflict. See
 [Memory synchronization](docs/VOICEBOT_INTEGRATION_GUIDE.md#7-memory-synchronization).
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🌏 Languages
 
@@ -318,7 +320,7 @@ configured in total — full matrix in `LANGUAGE_SUPPORT.md`, generated from
 > medicine times (read-only), visitors, reminders, games, and every command. General
 > knowledge and weather are refused honestly — never guessed.
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 📊 By the numbers
 
@@ -354,7 +356,7 @@ Backend gateway, a real Flutter client) and physical-device acceptance remain pe
 see `docs/RELEASE_ACCEPTANCE.md`. **Native-speaker language quality validation has not
 been performed for any language.**
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🚀 Getting started
 
@@ -417,7 +419,7 @@ sizing rationale and cost estimate in `docs/AWS_DEPLOYMENT.md`.
 > game scoring, or fully offline general conversation. None of it is silently implied by
 > anything shipped here.
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 ## 🗂 Project layout
 
@@ -470,7 +472,7 @@ smriti-voicebot-v5.0.0/
 
 </details>
 
----
+<img src=".github/assets/divider.svg" width="100%" alt=""/>
 
 <div align="center">
 
